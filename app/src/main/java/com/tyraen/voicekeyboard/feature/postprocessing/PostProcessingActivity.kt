@@ -11,12 +11,14 @@ import com.tyraen.voicekeyboard.app.ServiceLocator
 import com.tyraen.voicekeyboard.core.config.PostProcessingPreferences
 import com.tyraen.voicekeyboard.core.locale.InterfaceLanguageManager
 import com.tyraen.voicekeyboard.core.locale.TranscriptionLocale
+import com.tyraen.voicekeyboard.core.network.ApiEndpoint
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class PostProcessingActivity : AppCompatActivity() {
 
+    private lateinit var scrollView: ScrollView
     private lateinit var switchEnabled: Switch
     private lateinit var checkTerminalVisible: CheckBox
     private lateinit var spinnerProvider: Spinner
@@ -40,7 +42,9 @@ class PostProcessingActivity : AppCompatActivity() {
         PostProcessingPreferences.PROVIDER_OPENAI,
         PostProcessingPreferences.PROVIDER_CLAUDE
     )
-    private val providerLabels = listOf("OpenAI API", "Claude API")
+    private val providerLabels by lazy {
+        listOf(getString(R.string.pp_provider_openai), getString(R.string.pp_provider_claude))
+    }
 
     private var suppressProviderChange = false
     private val scope = MainScope()
@@ -66,6 +70,7 @@ class PostProcessingActivity : AppCompatActivity() {
     }
 
     private fun bindViews() {
+        scrollView = findViewById(R.id.scrollPp)
         switchEnabled = findViewById(R.id.switchPpEnabled)
         checkTerminalVisible = findViewById(R.id.checkTerminalVisible)
         spinnerProvider = findViewById(R.id.spinnerProvider)
@@ -84,7 +89,7 @@ class PostProcessingActivity : AppCompatActivity() {
     }
 
     private fun setupProviderSpinner() {
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, providerLabels)
+        val adapter = ArrayAdapter(this, R.layout.item_provider, providerLabels)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerProvider.adapter = adapter
 
@@ -149,15 +154,33 @@ class PostProcessingActivity : AppCompatActivity() {
     }
 
     private fun saveAndValidate() {
-        val providerIndex = spinnerProvider.selectedItemPosition
+        var provider = providers[spinnerProvider.selectedItemPosition]
+        val rawEndpoint = editEndpoint.text.toString().trim()
+
+        // The address is the more deliberate input: the spinner defaults to Claude, yet people
+        // paste OpenAI-style URLs (OpenRouter, Groq) and then see "invalid key" for what is really
+        // a dialect mismatch. When the address clearly belongs to the other provider, follow it
+        // and say so in the status line.
+        var switchedNote: String? = null
+        val detected = PostProcessingPreferences.providerFor(rawEndpoint)
+        if (detected != null && detected != provider) {
+            provider = detected
+            spinnerProvider.setSelection(providers.indexOf(provider))
+            switchedNote = getString(R.string.pp_provider_switched, providerLabels[providers.indexOf(provider)])
+        }
+
+        // A base URL ("…/api/v1") becomes the full request path; show the user what will be called.
+        val endpoint = ApiEndpoint.complete(rawEndpoint, PostProcessingPreferences.defaultPath(provider))
+        if (endpoint != rawEndpoint) editEndpoint.setText(endpoint)
+
         val tempText = editTemperature.text.toString().trim()
         val temperature = tempText.toFloatOrNull() ?: PostProcessingPreferences.DEFAULT_TEMPERATURE
 
         val prefs = PostProcessingPreferences(
             enabled = switchEnabled.isChecked,
-            provider = providers[providerIndex],
+            provider = provider,
             apiKey = editApiKey.text.toString().trim(),
-            endpoint = editEndpoint.text.toString().trim(),
+            endpoint = endpoint,
             model = editModel.text.toString().trim(),
             temperature = temperature.coerceIn(0f, 2f),
             promptFix = editPromptFix.text.toString().trim(),
@@ -169,6 +192,8 @@ class PostProcessingActivity : AppCompatActivity() {
             terminalVisible = checkTerminalVisible.isChecked
         )
 
+        val saved = listOfNotNull(switchedNote, getString(R.string.pp_saved)).joinToString("\n")
+
         btnApply.isEnabled = false
         showStatus(getString(R.string.pp_validating), Color.GRAY)
 
@@ -176,7 +201,7 @@ class PostProcessingActivity : AppCompatActivity() {
             preferenceStore.savePostProcessing(prefs)
 
             if (prefs.apiKey.isBlank()) {
-                showStatus(getString(R.string.pp_saved), Color.parseColor("#4CAF50"))
+                showStatus(saved, Color.parseColor("#4CAF50"))
                 btnApply.isEnabled = true
                 return@launch
             }
@@ -184,9 +209,9 @@ class PostProcessingActivity : AppCompatActivity() {
             val result = postProcessingClient.validateCredentials(prefs)
 
             result.onSuccess { msg ->
-                showStatus("${getString(R.string.pp_saved)} $msg", Color.parseColor("#4CAF50"))
+                showStatus("$saved $msg", Color.parseColor("#4CAF50"))
             }.onFailure { error ->
-                showStatus("${getString(R.string.pp_saved)} Error: ${error.message}", Color.parseColor("#EF4444"))
+                showStatus("$saved Error: ${error.message}", Color.parseColor("#EF4444"))
             }
 
             btnApply.isEnabled = true
@@ -197,5 +222,8 @@ class PostProcessingActivity : AppCompatActivity() {
         txtStatus.text = message
         txtStatus.setTextColor(color)
         txtStatus.visibility = View.VISIBLE
+        // The status sits below the Apply button, at the very end of a long form; without this
+        // a multi-line error is cut off at the screen edge and the user never sees the reason.
+        scrollView.post { scrollView.smoothScrollTo(0, scrollView.getChildAt(0).height) }
     }
 }

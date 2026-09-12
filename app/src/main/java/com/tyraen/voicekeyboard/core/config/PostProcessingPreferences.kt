@@ -1,5 +1,7 @@
 package com.tyraen.voicekeyboard.core.config
 
+import com.tyraen.voicekeyboard.core.network.ApiEndpoint
+
 data class PostProcessingPreferences(
     val enabled: Boolean = false,
     val provider: String = PROVIDER_CLAUDE,
@@ -19,11 +21,23 @@ data class PostProcessingPreferences(
         const val PROVIDER_OPENAI = "openai"
         const val PROVIDER_CLAUDE = "claude"
 
-        const val DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+        const val OPENAI_REQUEST_PATH = "/chat/completions"
+        const val DEFAULT_OPENAI_ENDPOINT = "https://api.openai.com/v1$OPENAI_REQUEST_PATH"
         const val DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 
-        const val DEFAULT_CLAUDE_ENDPOINT = "https://api.anthropic.com/v1/messages"
+        const val CLAUDE_REQUEST_PATH = "/messages"
+        const val DEFAULT_CLAUDE_ENDPOINT = "https://api.anthropic.com/v1$CLAUDE_REQUEST_PATH"
         const val DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-6"
+
+        /**
+         * Hosts that speak exactly one of the two request dialects. Used only to read a pasted
+         * base URL, where the path says nothing yet; a full path always wins (see [providerFor]).
+         */
+        private val OPENAI_STYLE_HOSTS = setOf(
+            "api.openai.com", "openrouter.ai", "api.groq.com", "api.mistral.ai",
+            "api.together.xyz", "api.deepseek.com"
+        )
+        private const val ANTHROPIC_HOST = "api.anthropic.com"
 
         const val DEFAULT_OPENAI_TRANSLATE_MODEL = "gpt-4o"
         const val DEFAULT_CLAUDE_TRANSLATE_MODEL = "claude-sonnet-4-6"
@@ -73,6 +87,31 @@ data class PostProcessingPreferences(
             else -> DEFAULT_OPENAI_ENDPOINT
         }
 
+        /** Request path appended to a pasted base URL, per provider dialect. */
+        fun defaultPath(provider: String): String = when (provider) {
+            PROVIDER_CLAUDE -> CLAUDE_REQUEST_PATH
+            else -> OPENAI_REQUEST_PATH
+        }
+
+        /**
+         * Which provider dialect an address speaks, when the address makes it obvious; null
+         * otherwise. The path is the strongest signal: only OpenAI-style APIs serve
+         * `/chat/completions`, only Anthropic-style ones serve `/messages`. For a bare base URL
+         * the host has to decide, and only hosts we know are consulted. The settings screen uses
+         * this to flip the provider spinner when it contradicts the pasted address.
+         */
+        fun providerFor(endpoint: String): String? {
+            val path = ApiEndpoint.pathOf(ApiEndpoint.complete(endpoint, ""))
+            if (path.endsWith(OPENAI_REQUEST_PATH)) return PROVIDER_OPENAI
+            if (path.endsWith(CLAUDE_REQUEST_PATH)) return PROVIDER_CLAUDE
+            return when (val host = ApiEndpoint.hostOf(ApiEndpoint.complete(endpoint, ""))) {
+                "" -> null
+                ANTHROPIC_HOST -> PROVIDER_CLAUDE
+                in OPENAI_STYLE_HOSTS -> PROVIDER_OPENAI
+                else -> null
+            }
+        }
+
         fun defaultModel(provider: String): String = when (provider) {
             PROVIDER_CLAUDE -> DEFAULT_CLAUDE_MODEL
             else -> DEFAULT_OPENAI_MODEL
@@ -84,9 +123,24 @@ data class PostProcessingPreferences(
         }
     }
 
-    fun resolvedEndpoint(): String = endpoint.ifBlank { defaultEndpoint(provider) }
+    /** The stored address with a pasted base URL completed to the full request path. */
+    fun resolvedEndpoint(): String =
+        ApiEndpoint.complete(endpoint, defaultPath(provider)).ifBlank { defaultEndpoint(provider) }
+
     fun resolvedModel(): String = model.ifBlank { defaultModel(provider) }
-    fun resolvedTranslateModel(): String = translateModel.ifBlank { defaultTranslateModel(provider) }
+
+    /**
+     * Model for translate / rhyme: the explicit override, else a stronger default. That default
+     * only exists on the provider's own API — on OpenRouter, Groq or a proxy "gpt-4o" is unknown
+     * and translation would silently fall back to the untranslated text. There, reuse the model
+     * the user configured instead of guessing.
+     */
+    fun resolvedTranslateModel(): String {
+        if (translateModel.isNotBlank()) return translateModel
+        val ownApi = endpoint.isBlank() ||
+            ApiEndpoint.hostOf(resolvedEndpoint()) == ApiEndpoint.hostOf(defaultEndpoint(provider))
+        return if (ownApi || model.isBlank()) defaultTranslateModel(provider) else model
+    }
     fun resolvedPromptFix(): String = promptFix.ifBlank { DEFAULT_PROMPT_FIX }
     fun resolvedPromptShorten(): String = promptShorten.ifBlank { DEFAULT_PROMPT_SHORTEN }
     fun resolvedPromptEmoji(): String = promptEmoji.ifBlank { DEFAULT_PROMPT_EMOJI }

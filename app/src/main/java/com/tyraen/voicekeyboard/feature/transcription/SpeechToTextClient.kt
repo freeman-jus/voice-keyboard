@@ -13,6 +13,11 @@ data class TranscriptionConfig(
 )
 
 interface SpeechToTextClient {
+    companion object {
+        /** Request path appended when the user pastes a provider's base URL ("…/v1"). */
+        const val REQUEST_PATH = "/audio/transcriptions"
+    }
+
     suspend fun transcribe(audioFile: File, config: TranscriptionConfig): Result<String>
     suspend fun validateCredentials(apiKey: String, endpoint: String, model: String, cacheDir: File): Result<String>
 }

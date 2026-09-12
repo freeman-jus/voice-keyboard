@@ -22,10 +22,12 @@ import com.tyraen.voicekeyboard.core.config.ThemeManager
 import com.tyraen.voicekeyboard.core.config.UserPreferences
 import com.tyraen.voicekeyboard.core.locale.InterfaceLanguageManager
 import com.tyraen.voicekeyboard.core.locale.TranscriptionLocale
+import com.tyraen.voicekeyboard.core.network.ApiEndpoint
 import com.tyraen.voicekeyboard.core.logging.DiagnosticLog
 import com.tyraen.voicekeyboard.core.logging.FaultCapture
 import com.tyraen.voicekeyboard.feature.audio.MicrophoneCaptureSession
 import com.tyraen.voicekeyboard.feature.postprocessing.PostProcessingActivity
+import com.tyraen.voicekeyboard.feature.transcription.SpeechToTextClient
 import com.tyraen.voicekeyboard.feature.transcription.WhisperPromptBuilder
 import com.tyraen.voicekeyboard.feature.vocabulary.VocabularyActivity
 import kotlinx.coroutines.*
@@ -247,6 +249,7 @@ class SetupActivity : AppCompatActivity() {
 
     private fun saveAndValidate() {
         val prefs = buildPreferences()
+        if (prefs.endpoint != editEndpoint.text.toString().trim()) editEndpoint.setText(prefs.endpoint)
 
         btnApply.isEnabled = false
         showApiStatus("Saving and validating API key...", Color.GRAY)
@@ -342,7 +345,10 @@ class SetupActivity : AppCompatActivity() {
 
     private fun buildPreferences() = UserPreferences(
         apiKey = editApiKey.text.toString().trim(),
-        endpoint = editEndpoint.text.toString().trim(),
+        // A pasted base URL ("api.mistral.ai/v1") or a scheme-less one is completed here, and an
+        // empty field falls back to the default instead of saving an address that cannot work.
+        endpoint = ApiEndpoint.complete(editEndpoint.text.toString(), SpeechToTextClient.REQUEST_PATH)
+            .ifBlank { getString(R.string.default_endpoint) },
         model = editModel.text.toString().trim(),
         languages = TranscriptionLocale.formatCodes(
             TranscriptionLocale.parseCodes(editLanguage.text.toString())

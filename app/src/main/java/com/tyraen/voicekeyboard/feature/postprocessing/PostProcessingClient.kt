@@ -15,6 +15,26 @@ class PostProcessingClient(private val httpClient: OkHttpClient) {
 
     companion object {
         private const val TAG = "PostProcessing"
+
+        /**
+         * Turns an HTTP failure into the line shown under the Apply button. The provider's own
+         * message is appended when the body carries one: a 404 from OpenRouter means "unknown
+         * model" as often as "wrong URL", and only the server can tell the user which it was.
+         */
+        fun describeFailure(statusCode: Int, body: String): String {
+            val base = when (statusCode) {
+                401 -> "Invalid API key"
+                403 -> "Access denied (check region/permissions)"
+                404 -> "Not found: check the endpoint URL and the model name"
+                400, 422 -> "Request rejected: check the model name and settings"
+                in 500..599 -> "Server error, try again later"
+                else -> "API error $statusCode"
+            }
+            val detail = PostProcessingResponseParser.errorMessage(body)
+                ?.replace(Regex("\\s+"), " ")
+                ?.take(200)
+            return if (detail.isNullOrBlank()) base else "$base ($detail)"
+        }
     }
 
     class ApiException(val statusCode: Int, val body: String) :
@@ -60,13 +80,10 @@ class PostProcessingClient(private val httpClient: OkHttpClient) {
             Result.success("API key is valid.")
         } catch (e: ApiException) {
             DiagnosticLog.recordFailure(TAG, "Validation failed", e)
-            when (e.statusCode) {
-                401 -> Result.failure(Exception("Invalid API key"))
-                403 -> Result.failure(Exception("Access denied (check region/permissions)"))
-                404 -> Result.failure(Exception("Invalid endpoint URL"))
-                429 -> Result.success("Rate limit exceeded, but key is valid")
-                in 500..599 -> Result.failure(Exception("Server error, try again later"))
-                else -> Result.failure(Exception("API error ${e.statusCode}"))
+            if (e.statusCode == 429) {
+                Result.success("Rate limit exceeded, but key is valid")
+            } else {
+                Result.failure(Exception(describeFailure(e.statusCode, e.body)))
             }
         } catch (e: Exception) {
             DiagnosticLog.recordFailure(TAG, "Validation failed", e)
@@ -122,12 +139,7 @@ class PostProcessingClient(private val httpClient: OkHttpClient) {
             text
         }
 
-        val json = JSONObject(responseBody)
-        return json.getJSONArray("choices")
-            .getJSONObject(0)
-            .getJSONObject("message")
-            .getString("content")
-            .trim()
+        return PostProcessingResponseParser.openAiText(responseBody)
     }
 
     private fun callClaude(
@@ -167,10 +179,6 @@ class PostProcessingClient(private val httpClient: OkHttpClient) {
             text
         }
 
-        val json = JSONObject(responseBody)
-        return json.getJSONArray("content")
-            .getJSONObject(0)
-            .getString("text")
-            .trim()
+        return PostProcessingResponseParser.claudeText(responseBody)
     }
 }

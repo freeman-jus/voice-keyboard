@@ -29,7 +29,8 @@ Android keyboard (IME) for speech-to-text. Sends audio to any OpenAI-compatible 
 - **Emoji** — adds relevant emoji to your messages
 - **Rhyme** — rewrites dictated text as poetry
 - **Translate** — translates to any of the supported languages
-- Supports OpenAI and Claude as processing providers
+- Modes are switched with toggle buttons right on the keyboard, per recording
+- Works with OpenAI, Claude, or any OpenAI-compatible provider (OpenRouter, Groq, …)
 - Customizable prompts and temperature for each mode
 
 ### Keyboard
@@ -56,7 +57,9 @@ Android keyboard (IME) for speech-to-text. Sends audio to any OpenAI-compatible 
    - **Groq** (default, free) — get a key at [console.groq.com/keys](https://console.groq.com/keys); nothing else to change.
    - **Mistral** (free) — get a key at [console.mistral.ai](https://console.mistral.ai/api-keys), then set the endpoint to `https://api.mistral.ai/v1/audio/transcriptions` and the model to `voxtral-mini-latest`.
    - **OpenAI** or any other compatible provider — set the endpoint and model in the same screen.
-5. (Optional) Configure post-processing with your OpenAI or Claude API key
+5. (Optional) Configure post-processing with an OpenAI or Claude API key, or any OpenAI-compatible provider:
+   - **OpenRouter** — provider "OpenAI-compatible", endpoint `https://openrouter.ai/api/v1` (the rest of the path is added automatically), model with the vendor prefix, e.g. `openai/gpt-4o-mini`. The translation model can stay empty; it reuses the model you set.
+   - Once post-processing is enabled, a row of toggle buttons (fix, shorten, emoji, rhyme, translate) appears on the keyboard above the space bar.
 
 ### Installing via Obtainium (recommended)
 
