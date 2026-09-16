@@ -121,4 +121,37 @@
     <string name="mic_disclosure_body">When you tap the microphone button, this keyboard records audio and sends it to a speech‑to‑text service to turn your voice into text.\n\n• What is sent: only the audio from a recording you start.\n• Where it goes: by default, to Groq Whisper. You can change this in settings to any OpenAI‑compatible Whisper endpoint, including OpenAI itself.\n• Authentication: requests are made with the API key you provide; the app has no built‑in account.\n• What is not collected: the app has no analytics, no advertising, and never uploads your audio anywhere except to the endpoint you configured.\n\nAudio is sent only while you are actively recording — never in the background.</string>
     <string name="mic_disclosure_privacy">View privacy policy</string>
     <string name="mic_disclosure_continue">I understand, continue</string>
+    <string name="mic_permission_open_settings">Microphone access was denied. Allow it in the app settings that just opened.</string>
+
+    <!-- Keyboard status line -->
+    <string name="error_mic_permission">Microphone permission required</string>
+    <string name="error_mic_unavailable">Microphone is busy or unavailable</string>
+    <string name="error_api_key_missing">API key not set</string>
+    <string name="notice_discard_failed_confirm">Hold again to delete the unsent recordings</string>
+    <string name="notice_discard_failed_done">Deleted unsent recordings: %d</string>
+
+    <!-- Setup screen: keyboard state, tests, logs, crash report -->
+    <string name="keyboard_status_enabled">Voice Keyboard is enabled</string>
+    <string name="keyboard_status_disabled">Voice Keyboard is not enabled yet</string>
+    <string name="keyboard_status_active">Voice Keyboard is your current keyboard. To type in these fields, switch to another keyboard.</string>
+    <string name="keyboard_open_settings">Enable keyboard</string>
+    <string name="keyboard_switch">Switch keyboard</string>
+    <string name="settings_saved">Settings saved.</string>
+    <string name="test_status_set_key">Set the API key first and press \"Apply\"</string>
+    <string name="test_status_recording">Recording… tap \"Stop &amp; Transcribe\" when done</string>
+    <string name="test_status_failed">Recording failed</string>
+    <string name="test_status_success">Success</string>
+    <string name="test_status_no_speech">No speech detected. Try speaking louder.</string>
+    <string name="logs_share">Share</string>
+    <string name="logs_saved_to">Saved: %s</string>
+    <string name="logs_none">No logs to save</string>
+    <string name="logs_cleared">Logs cleared</string>
+    <string name="crash_title">The app crashed last time</string>
+    <string name="crash_message">Share or save the crash report so the problem can be fixed?</string>
+    <string name="crash_share">Share</string>
+    <string name="crash_save">Save</string>
+    <string name="crash_dismiss">Dismiss</string>
+    <string name="crash_save_failed">Could not save the report</string>
+    <string name="preset_label">Provider preset</string>
+    <string name="preset_custom">Custom</string>
 </resources>

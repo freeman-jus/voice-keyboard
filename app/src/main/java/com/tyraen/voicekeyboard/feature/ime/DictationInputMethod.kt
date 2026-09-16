@@ -18,6 +18,7 @@ import com.tyraen.voicekeyboard.core.locale.InterfaceLanguageManager
 import com.tyraen.voicekeyboard.core.locale.TranscriptionLocale
 import com.tyraen.voicekeyboard.core.logging.DiagnosticLog
 import com.tyraen.voicekeyboard.feature.audio.MicrophoneCaptureSession
+import com.tyraen.voicekeyboard.feature.setup.MicrophonePermissionActivity
 import com.tyraen.voicekeyboard.feature.setup.SetupActivity
 
 class DictationInputMethod : InputMethodService() {
@@ -61,11 +62,11 @@ class DictationInputMethod : InputMethodService() {
             preferenceStore = ServiceLocator.preferenceStore,
             processingQueue = ServiceLocator.transcriptionQueue,
             capture = MicrophoneCaptureSession(this),
-            onTextReady = { text ->
-                if (keyboardVisible) {
-                    keystrokes.insertText(text)
-                } else {
-                    copyToClipboard(text)
+            onTextReady = { text, addTrailingSpace ->
+                // A visible panel can still lack an InputConnection (some apps drop it mid-edit);
+                // the clipboard is the fallback there too, never a silent loss.
+                if (!keyboardVisible || !keystrokes.insertDictation(text, addTrailingSpace)) {
+                    copyToClipboard(if (addTrailingSpace) "$text " else text)
                 }
             },
             onPhaseChanged = { phase -> panel.transitionTo(phase) },
@@ -76,8 +77,10 @@ class DictationInputMethod : InputMethodService() {
             onPreferencesLoaded = {
                 refreshPostProcessingUI()
                 refreshLanguageKey()
-            }
+            },
+            onPermissionNeeded = { requestMicPermission() }
         )
+        orchestrator.viewVisible = keyboardVisible
 
         orchestrator.loadPreferences()
         wireControls(view)
@@ -96,14 +99,30 @@ class DictationInputMethod : InputMethodService() {
             return
         }
 
-        if (::orchestrator.isInitialized) orchestrator.reloadAndAutoStart()
+        if (::orchestrator.isInitialized) {
+            orchestrator.viewVisible = true
+            orchestrator.reloadAndAutoStart()
+        }
         refreshClipboardBar()
     }
 
     override fun onWindowHidden() {
         super.onWindowHidden()
         keyboardVisible = false
-        if (::orchestrator.isInitialized) orchestrator.gracefulShutdown()
+        if (::orchestrator.isInitialized) {
+            orchestrator.viewVisible = false
+            orchestrator.gracefulShutdown()
+        }
+    }
+
+    /**
+     * An InputMethodService cannot ask for runtime permissions itself; a transparent activity
+     * does it on the keyboard's behalf (or opens app settings after "Don't ask again").
+     */
+    private fun requestMicPermission() {
+        startActivity(Intent(this, MicrophonePermissionActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
     }
 
     private fun copyToClipboard(text: String) {
@@ -138,6 +157,18 @@ class DictationInputMethod : InputMethodService() {
         btnMic.setOnClickListener { orchestrator.handleAction(InputAction.ToggleCapture) }
         btnCancel.setOnClickListener { orchestrator.handleAction(InputAction.CancelOperation) }
         btnRetryFailed.setOnClickListener { orchestrator.retryFailed() }
+        // Deleting failed recordings is destructive, so it takes two long-presses: the first one
+        // explains what a second one will do, and the offer expires with the notice.
+        btnRetryFailed.setOnLongClickListener {
+            if (panel.noticeShowing) {
+                orchestrator.discardFailed { removed ->
+                    panel.showNotice(getString(R.string.notice_discard_failed_done, removed))
+                }
+            } else {
+                panel.showNotice(getString(R.string.notice_discard_failed_confirm))
+            }
+            true
+        }
 
         btnBackspace.setOnTouchListener { v, event ->
             when (event.action) {
@@ -164,13 +195,15 @@ class DictationInputMethod : InputMethodService() {
             true
         }
         btnEnter.setOnClickListener { keystrokes.sendEnter() }
-        btnPeriod.setOnClickListener { keystrokes.insertText(".") }
-        btnQuestion.setOnClickListener { keystrokes.insertText("?") }
-        btnExclamation.setOnClickListener { keystrokes.insertText("!") }
+        btnPeriod.setOnClickListener { keystrokes.insertPunctuation(".") }
+        btnQuestion.setOnClickListener { keystrokes.insertPunctuation("?") }
+        btnExclamation.setOnClickListener { keystrokes.insertPunctuation("!") }
 
         btnSettings.setOnClickListener {
+            // SINGLE_TOP reuses a settings screen that is already open instead of stacking a
+            // second one on top of it.
             startActivity(Intent(this, SetupActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             })
         }
 

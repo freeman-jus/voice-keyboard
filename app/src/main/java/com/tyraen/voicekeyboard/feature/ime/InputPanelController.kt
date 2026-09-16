@@ -2,6 +2,7 @@ package com.tyraen.voicekeyboard.feature.ime
 
 import android.text.TextPaint
 import android.view.View
+import androidx.annotation.StringRes
 import android.view.ViewGroup
 import android.widget.*
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -59,6 +60,7 @@ class InputPanelController(rootView: View) {
                 applyQueueState()
             }
             is InputPhase.Capturing -> {
+                clearNotice()
                 statusText.setText(R.string.status_recording)
                 btnMic.setBackgroundResource(R.drawable.mic_button_recording)
                 btnMic.visibility = View.VISIBLE
@@ -67,7 +69,7 @@ class InputPanelController(rootView: View) {
                 animator.beginPulse()
             }
             is InputPhase.Failed -> {
-                displayError(phase.reason)
+                displayError(phase.reasonRes)
             }
         }
     }
@@ -105,6 +107,7 @@ class InputPanelController(rootView: View) {
     }
 
     private fun applyQueueState() {
+        clearNotice()
         if (currentQueueCount > 0) {
             when (currentProcessingPhase) {
                 ProcessingQueue.ProcessingPhase.TRANSCRIBING ->
@@ -119,9 +122,37 @@ class InputPanelController(rootView: View) {
         }
     }
 
-    fun displayError(message: String) {
-        statusText.text = statusText.context.getString(R.string.status_error, message)
+    fun displayError(@StringRes reasonRes: Int) {
+        clearNotice()
+        val context = statusText.context
+        statusText.text = context.getString(R.string.status_error, context.getString(reasonRes))
     }
+
+    private var noticeReset: Runnable? = null
+
+    /** Any other status write ends the notice, so [noticeShowing] means the text is really on screen. */
+    private fun clearNotice() {
+        noticeReset?.let { statusText.removeCallbacks(it) }
+        noticeReset = null
+    }
+
+    /**
+     * Show a transient line in the status area (confirmations, hints) and fall back to the
+     * regular status after [durationMs], unless a recording started meanwhile.
+     */
+    fun showNotice(text: String, durationMs: Long = 4000L) {
+        clearNotice()
+        statusText.text = text
+        val reset = Runnable {
+            noticeReset = null
+            if (currentPhase is InputPhase.Ready) applyQueueState()
+        }
+        noticeReset = reset
+        statusText.postDelayed(reset, durationMs)
+    }
+
+    /** Whether a notice is currently on screen (used for two-step confirmations). */
+    val noticeShowing: Boolean get() = noticeReset != null
 
     fun showPostProcessingButtons(show: Boolean) {
         ppToggleRow.visibility = if (show) View.VISIBLE else View.GONE

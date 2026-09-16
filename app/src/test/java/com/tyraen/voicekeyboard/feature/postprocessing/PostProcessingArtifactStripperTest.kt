@@ -114,4 +114,23 @@ class PostProcessingArtifactStripperTest {
         val input = "Привет.\n\n*(Замечание: оставлено как есть.)*"
         assertEquals("Привет.", PostProcessingArtifactStripper.strip(input))
     }
+
+    @Test fun `removes a closed think block and the newline after it`() {
+        val input = "<think>\nThe user wants punctuation fixed.\n</think>\n\nHello, how are you?"
+        assertEquals("Hello, how are you?", PostProcessingArtifactStripper.strip(input))
+    }
+
+    @Test fun `removes reasoning blocks regardless of tag case and position`() {
+        val input = "Hello.<REASONING>why</REASONING> How are you?"
+        assertEquals("Hello. How are you?", PostProcessingArtifactStripper.strip(input))
+    }
+
+    @Test fun `leaves an unclosed think block alone`() {
+        val input = "<think>\nstill thinking"
+        assertEquals(input, PostProcessingArtifactStripper.strip(input))
+    }
+
+    @Test fun `a think block that is the whole answer yields blank`() {
+        assertEquals("", PostProcessingArtifactStripper.strip("<think>nothing to say</think>"))
+    }
 }

@@ -56,6 +56,40 @@ class KeystrokeDispatcher(private val connectionProvider: () -> InputConnection?
         connectionProvider()?.commitText(text, 1)
     }
 
+    /**
+     * Commit a dictated chunk with context-aware padding: a space in front when the cursor sits
+     * right after a word, the configured trailing space only when nothing is already there.
+     */
+    fun insertDictation(text: String, addTrailingSpace: Boolean): Boolean {
+        val ic = connectionProvider() ?: return false
+        val pad = DictationSpacing.decide(
+            before = ic.getTextBeforeCursor(1, 0),
+            after = ic.getTextAfterCursor(1, 0),
+            wantTrailing = addTrailingSpace
+        )
+        val out = buildString {
+            if (pad.leading) append(' ')
+            append(text)
+            if (pad.trailing) append(' ')
+        }
+        ic.commitText(out, 1)
+        return true
+    }
+
+    /**
+     * Type a punctuation mark the way a person would: dictation leaves "hello " behind, and a
+     * tap on the period key should produce "hello." rather than "hello .".
+     */
+    fun insertPunctuation(mark: String) {
+        val ic = connectionProvider() ?: return
+        ic.beginBatchEdit()
+        if (DictationSpacing.eatsPrecedingSpace(ic.getTextBeforeCursor(1, 0))) {
+            ic.deleteSurroundingText(1, 0)
+        }
+        ic.commitText(mark, 1)
+        ic.endBatchEdit()
+    }
+
     fun sendEnter() {
         connectionProvider()?.let { ic ->
             ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))

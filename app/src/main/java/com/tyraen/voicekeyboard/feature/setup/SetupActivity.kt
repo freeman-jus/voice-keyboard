@@ -1,23 +1,25 @@
 package com.tyraen.voicekeyboard.feature.setup
 
-import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.tyraen.voicekeyboard.R
 import com.tyraen.voicekeyboard.app.ServiceLocator
 import com.tyraen.voicekeyboard.core.config.PreferenceStore
+import com.tyraen.voicekeyboard.core.config.ProviderPresets
 import com.tyraen.voicekeyboard.core.config.ThemeManager
 import com.tyraen.voicekeyboard.core.config.UserPreferences
 import com.tyraen.voicekeyboard.core.locale.InterfaceLanguageManager
@@ -34,8 +36,15 @@ import kotlinx.coroutines.*
 
 class SetupActivity : AppCompatActivity() {
 
+    companion object {
+        private const val COLOR_OK = "#4CAF50"
+        private const val COLOR_ERROR = "#EF4444"
+        private const val COLOR_WARN = "#FBBF24"
+    }
+
     private lateinit var spinnerTheme: Spinner
     private lateinit var spinnerLanguage: Spinner
+    private lateinit var spinnerSttPreset: Spinner
     private lateinit var editApiKey: EditText
     private lateinit var editEndpoint: EditText
     private lateinit var editModel: EditText
@@ -47,10 +56,15 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var txtApiStatus: TextView
     private lateinit var txtTestResult: TextView
     private lateinit var txtTestStatus: TextView
+    private lateinit var txtKeyboardStatus: TextView
+    private lateinit var txtActiveKeyboardHint: TextView
+    private lateinit var btnEnableKeyboard: Button
+    private lateinit var btnSwitchKeyboard: Button
     private lateinit var btnTestRecord: Button
     private lateinit var btnTestClear: Button
     private lateinit var btnApply: Button
     private lateinit var btnSaveLogs: Button
+    private lateinit var btnShareLogs: Button
     private lateinit var btnClearLogs: Button
     private lateinit var btnCheckUpdate: Button
     private lateinit var btnPostProcessing: Button
@@ -69,6 +83,9 @@ class SetupActivity : AppCompatActivity() {
     private var activeJob: Job? = null
     private val scope = MainScope()
 
+    /** Position the code itself put the preset spinner at; its echo callback is ignored. */
+    private var presetPosSetByCode = -1
+
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(InterfaceLanguageManager.applyTo(newBase))
     }
@@ -80,11 +97,30 @@ class SetupActivity : AppCompatActivity() {
         bindViews()
         setupThemeSpinner()
         setupLanguageSpinner()
+        setupPresetSpinner()
         setupActions()
         loadCurrentPreferences()
-        ensureMicDisclosureThenRequestPermission()
+        showMicDisclosureIfNeeded()
         checkPendingCrashReport()
         checkForUpdates()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshKeyboardStatus()
+    }
+
+    /** singleTop: the cog re-enters this instance, so pick up what the keyboard changed meanwhile. */
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        loadCurrentPreferences()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == MicPermission.REQUEST_CODE) {
+            scope.launch { MicPermission.recordResult(this@SetupActivity, preferenceStore, grantResults) }
+        }
     }
 
     override fun onDestroy() {
@@ -96,6 +132,7 @@ class SetupActivity : AppCompatActivity() {
     private fun bindViews() {
         spinnerTheme = findViewById(R.id.spinnerTheme)
         spinnerLanguage = findViewById(R.id.spinnerLanguage)
+        spinnerSttPreset = findViewById(R.id.spinnerSttPreset)
         editApiKey = findViewById(R.id.editApiKey)
         editEndpoint = findViewById(R.id.editEndpoint)
         editModel = findViewById(R.id.editModel)
@@ -107,10 +144,15 @@ class SetupActivity : AppCompatActivity() {
         txtApiStatus = findViewById(R.id.txtApiStatus)
         txtTestResult = findViewById(R.id.txtTestResult)
         txtTestStatus = findViewById(R.id.txtTestStatus)
+        txtKeyboardStatus = findViewById(R.id.txtKeyboardStatus)
+        txtActiveKeyboardHint = findViewById(R.id.txtActiveKeyboardHint)
+        btnEnableKeyboard = findViewById(R.id.btnEnableKeyboard)
+        btnSwitchKeyboard = findViewById(R.id.btnSwitchKeyboard)
         btnTestRecord = findViewById(R.id.btnTestRecord)
         btnTestClear = findViewById(R.id.btnTestClear)
         btnApply = findViewById(R.id.btnApply)
         btnSaveLogs = findViewById(R.id.btnSaveLogs)
+        btnShareLogs = findViewById(R.id.btnShareLogs)
         btnClearLogs = findViewById(R.id.btnClearLogs)
         btnCheckUpdate = findViewById(R.id.btnCheckUpdate)
         btnPostProcessing = findViewById(R.id.btnPostProcessing)
@@ -134,6 +176,17 @@ class SetupActivity : AppCompatActivity() {
     private fun setupActions() {
         btnApply.setOnClickListener { saveAndValidate() }
 
+        btnEnableKeyboard.setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, R.string.settings_enable_instructions, Toast.LENGTH_LONG).show()
+            }
+        }
+        btnSwitchKeyboard.setOnClickListener {
+            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
+        }
+
         btnTestRecord.setOnClickListener {
             if (isTestRecording) stopTestAndTranscribe() else startTestRecording()
         }
@@ -146,15 +199,23 @@ class SetupActivity : AppCompatActivity() {
         btnSaveLogs.setOnClickListener {
             val file = DiagnosticLog.exportToFile(this)
             if (file != null) {
-                Toast.makeText(this, "Saved: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.logs_saved_to, file.absolutePath), Toast.LENGTH_LONG).show()
             } else {
-                Toast.makeText(this, "No logs to save", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.logs_none, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnShareLogs.setOnClickListener {
+            if (DiagnosticLog.hasEntries(this)) {
+                shareText("Voice Keyboard logs", DiagnosticLog.readEntries(this))
+            } else {
+                Toast.makeText(this, R.string.logs_none, Toast.LENGTH_SHORT).show()
             }
         }
 
         btnClearLogs.setOnClickListener {
             DiagnosticLog.purge(this)
-            Toast.makeText(this, "Logs cleared", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.logs_cleared, Toast.LENGTH_SHORT).show()
         }
 
         btnCheckUpdate.setOnClickListener { checkForUpdates(showUpToDate = true) }
@@ -166,6 +227,25 @@ class SetupActivity : AppCompatActivity() {
         btnVocabulary.setOnClickListener {
             startActivity(Intent(this, VocabularyActivity::class.java))
         }
+    }
+
+    /**
+     * The panel this keyboard shows has no letter keys, so while it is the active input method
+     * the fields on this very screen cannot be typed into. Say so, and offer the way out.
+     */
+    private fun refreshKeyboardStatus() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        val enabled = try {
+            imm.enabledInputMethodList.any { it.packageName == packageName }
+        } catch (_: Exception) {
+            false
+        }
+        val current = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) ?: ""
+        val active = current.startsWith("$packageName/")
+
+        txtKeyboardStatus.setText(if (enabled) R.string.keyboard_status_enabled else R.string.keyboard_status_disabled)
+        txtKeyboardStatus.setTextColor(Color.parseColor(if (enabled) COLOR_OK else COLOR_WARN))
+        txtActiveKeyboardHint.visibility = if (active) View.VISIBLE else View.GONE
     }
 
     private val themeValues = listOf(ThemeManager.THEME_AUTO, ThemeManager.THEME_LIGHT, ThemeManager.THEME_DARK)
@@ -232,6 +312,43 @@ class SetupActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * "Custom" plus the known speech-to-text providers. Picking one fills the address and model;
+     * editing the address by hand moves the spinner back to whatever matches, or to "Custom".
+     */
+    private fun setupPresetSpinner() {
+        val labels = listOf(getString(R.string.preset_custom)) + ProviderPresets.speechToText.map { it.name }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinnerSttPreset.adapter = adapter
+
+        spinnerSttPreset.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position == presetPosSetByCode) {
+                    presetPosSetByCode = -1
+                    return
+                }
+                presetPosSetByCode = -1
+                val preset = ProviderPresets.speechToText.getOrNull(position - 1) ?: return
+                editEndpoint.setText(preset.endpoint)
+                editModel.setText(preset.model)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        editEndpoint.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val pos = ProviderPresets.indexOf(ProviderPresets.speechToText, s?.toString() ?: "") + 1
+                if (spinnerSttPreset.selectedItemPosition != pos) {
+                    presetPosSetByCode = pos
+                    spinnerSttPreset.setSelection(pos, false)
+                }
+            }
+        })
+    }
+
     private fun loadCurrentPreferences() {
         scope.launch {
             val p = preferenceStore.load()
@@ -252,7 +369,7 @@ class SetupActivity : AppCompatActivity() {
         if (prefs.endpoint != editEndpoint.text.toString().trim()) editEndpoint.setText(prefs.endpoint)
 
         btnApply.isEnabled = false
-        showApiStatus("Saving and validating API key...", Color.GRAY)
+        showApiStatus(getString(R.string.pp_validating), Color.GRAY)
 
         activeJob = scope.launch {
             preferenceStore.save(prefs)
@@ -264,10 +381,11 @@ class SetupActivity : AppCompatActivity() {
                 cacheDir = cacheDir
             )
 
+            val saved = getString(R.string.settings_saved)
             result.onSuccess { msg ->
-                showApiStatus("Settings saved. $msg", Color.parseColor("#4CAF50"))
+                showApiStatus("$saved $msg", Color.parseColor(COLOR_OK))
             }.onFailure { error ->
-                showApiStatus("Settings saved. Error: ${error.message}", Color.parseColor("#EF4444"))
+                showApiStatus("$saved ${getString(R.string.status_error, error.message)}", Color.parseColor(COLOR_ERROR))
             }
 
             btnApply.isEnabled = true
@@ -275,26 +393,28 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun startTestRecording() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            showTestStatus("Microphone permission required", Color.parseColor("#EF4444"))
-            requestMicPermission()
+        if (!MicPermission.isGranted(this)) {
+            showTestStatus(getString(R.string.error_mic_permission), Color.parseColor(COLOR_ERROR))
+            scope.launch { MicPermission.requestOrOpenSettings(this@SetupActivity, preferenceStore) }
             return
         }
 
         if (editApiKey.text.toString().trim().isBlank()) {
-            showTestStatus("Set API key first and press Apply", Color.parseColor("#EF4444"))
+            showTestStatus(getString(R.string.test_status_set_key), Color.parseColor(COLOR_ERROR))
             return
         }
 
-        capture = MicrophoneCaptureSession(this)
-        capture?.begin { }
+        val session = MicrophoneCaptureSession(this)
+        if (!session.begin { }) {
+            showTestStatus(getString(R.string.error_mic_unavailable), Color.parseColor(COLOR_ERROR))
+            return
+        }
+        capture = session
 
         isTestRecording = true
         btnTestRecord.text = getString(R.string.test_stop)
         btnTestRecord.backgroundTintList = ContextCompat.getColorStateList(this, R.color.mic_transcribing)
-        showTestStatus("Recording... Tap \"Stop & Transcribe\" when done", Color.parseColor("#FBBF24"))
+        showTestStatus(getString(R.string.test_status_recording), Color.parseColor(COLOR_WARN))
     }
 
     private fun stopTestAndTranscribe() {
@@ -304,12 +424,12 @@ class SetupActivity : AppCompatActivity() {
         btnTestRecord.backgroundTintList = ContextCompat.getColorStateList(this, R.color.mic_recording)
 
         if (file == null || !file.exists()) {
-            showTestStatus("Recording failed", Color.parseColor("#EF4444"))
+            showTestStatus(getString(R.string.test_status_failed), Color.parseColor(COLOR_ERROR))
             return
         }
 
         btnTestRecord.isEnabled = false
-        showTestStatus("Transcribing...", Color.GRAY)
+        showTestStatus(getString(R.string.status_transcribing), Color.GRAY)
 
         val prefs = buildPreferences()
 
@@ -326,17 +446,18 @@ class SetupActivity : AppCompatActivity() {
             )
 
             val result = speechClient.transcribe(file, config)
+            file.delete()
 
             result.onSuccess { text ->
                 if (text.isNotBlank()) {
                     txtTestResult.text = text
-                    showTestStatus("Success", Color.parseColor("#4CAF50"))
+                    showTestStatus(getString(R.string.test_status_success), Color.parseColor(COLOR_OK))
                 } else {
                     txtTestResult.text = ""
-                    showTestStatus("No speech detected. Try speaking louder.", Color.parseColor("#FBBF24"))
+                    showTestStatus(getString(R.string.test_status_no_speech), Color.parseColor(COLOR_WARN))
                 }
             }.onFailure { error ->
-                showTestStatus("Error: ${error.message}", Color.parseColor("#EF4444"))
+                showTestStatus(getString(R.string.status_error, error.message), Color.parseColor(COLOR_ERROR))
             }
 
             btnTestRecord.isEnabled = true
@@ -372,24 +493,39 @@ class SetupActivity : AppCompatActivity() {
         txtTestStatus.visibility = View.VISIBLE
     }
 
+    private fun shareText(subject: String, text: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        try {
+            startActivity(Intent.createChooser(intent, subject))
+        } catch (_: Exception) {}
+    }
+
     private fun checkPendingCrashReport() {
         if (!FaultCapture.hasPendingReport(this)) return
 
         val report = FaultCapture.retrieveReport(this) ?: return
 
         AlertDialog.Builder(this)
-            .setTitle("App crashed last time")
-            .setMessage("Save crash report to file for debugging?")
-            .setPositiveButton("Save") { _, _ ->
+            .setTitle(R.string.crash_title)
+            .setMessage(R.string.crash_message)
+            .setPositiveButton(R.string.crash_share) { _, _ ->
+                shareText("Voice Keyboard crash report", report)
+                FaultCapture.dismissReport(this)
+            }
+            .setNeutralButton(R.string.crash_save) { _, _ ->
                 val file = FaultCapture.exportReport(this, report)
                 if (file != null) {
-                    Toast.makeText(this, "Saved: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.logs_saved_to, file.absolutePath), Toast.LENGTH_LONG).show()
                 } else {
-                    Toast.makeText(this, "Failed to save report", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, R.string.crash_save_failed, Toast.LENGTH_SHORT).show()
                 }
                 FaultCapture.dismissReport(this)
             }
-            .setNegativeButton("Dismiss") { _, _ ->
+            .setNegativeButton(R.string.crash_dismiss) { _, _ ->
                 FaultCapture.dismissReport(this)
             }
             .setCancelable(false)
@@ -402,13 +538,13 @@ class SetupActivity : AppCompatActivity() {
         }
     }
 
-    private fun ensureMicDisclosureThenRequestPermission() {
+    /**
+     * First launch only: explain what the microphone is for, then ask once. Later launches never
+     * re-prompt on their own; the test button and the keyboard's mic ask when the user acts.
+     */
+    private fun showMicDisclosureIfNeeded() {
         scope.launch {
-            if (preferenceStore.isMicDisclosureAccepted()) {
-                requestMicPermission()
-            } else {
-                showMicDisclosure()
-            }
+            if (!preferenceStore.isMicDisclosureAccepted()) showMicDisclosure()
         }
     }
 
@@ -420,7 +556,7 @@ class SetupActivity : AppCompatActivity() {
             .setPositiveButton(R.string.mic_disclosure_continue) { _, _ ->
                 scope.launch {
                     preferenceStore.setMicDisclosureAccepted()
-                    requestMicPermission()
+                    MicPermission.requestOrOpenSettings(this@SetupActivity, preferenceStore)
                 }
             }
             .setNeutralButton(R.string.mic_disclosure_privacy) { _, _ ->
@@ -433,14 +569,6 @@ class SetupActivity : AppCompatActivity() {
                 showMicDisclosure()
             }
             .show()
-    }
-
-    private fun requestMicPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 100)
-        }
     }
 
     private fun setupLink(view: TextView, url: String) {

@@ -89,6 +89,20 @@
             android:backgroundTint="@color/mic_idle"
             android:layout_marginBottom="16dp" />
 
+        <!-- Provider preset: fills dialect + endpoint + model -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/preset_label"
+            android:textColor="@color/key_text"
+            android:textSize="14sp" />
+        <Spinner
+            android:id="@+id/spinnerLlmPreset"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:backgroundTint="@color/mic_idle"
+            android:layout_marginBottom="16dp" />
+
         <!-- Endpoint -->
         <TextView
             android:layout_width="wrap_content"
@@ -130,7 +144,8 @@
             android:id="@+id/editPpModel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="text"
+            android:inputType="text|textNoSuggestions"
+            android:importantForAutofill="no"
             android:textColor="@color/text_primary"
             android:backgroundTint="@color/mic_idle"
             android:layout_marginBottom="16dp" />
@@ -207,7 +222,8 @@
             android:id="@+id/editTranslateModel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="text"
+            android:inputType="text|textNoSuggestions"
+            android:importantForAutofill="no"
             android:textColor="@color/text_primary"
             android:backgroundTint="@color/mic_idle"
             android:layout_marginBottom="24dp" />

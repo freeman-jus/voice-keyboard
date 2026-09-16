@@ -3,12 +3,15 @@ package com.tyraen.voicekeyboard.feature.postprocessing
 import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.tyraen.voicekeyboard.R
 import com.tyraen.voicekeyboard.app.ServiceLocator
 import com.tyraen.voicekeyboard.core.config.PostProcessingPreferences
+import com.tyraen.voicekeyboard.core.config.ProviderPresets
 import com.tyraen.voicekeyboard.core.locale.InterfaceLanguageManager
 import com.tyraen.voicekeyboard.core.locale.TranscriptionLocale
 import com.tyraen.voicekeyboard.core.network.ApiEndpoint
@@ -22,6 +25,7 @@ class PostProcessingActivity : AppCompatActivity() {
     private lateinit var switchEnabled: Switch
     private lateinit var checkTerminalVisible: CheckBox
     private lateinit var spinnerProvider: Spinner
+    private lateinit var spinnerLlmPreset: Spinner
     private lateinit var editApiKey: EditText
     private lateinit var editEndpoint: EditText
     private lateinit var editModel: EditText
@@ -47,6 +51,8 @@ class PostProcessingActivity : AppCompatActivity() {
     }
 
     private var suppressProviderChange = false
+    /** Position the code itself put the preset spinner at; its echo callback is ignored. */
+    private var presetPosSetByCode = -1
     private val scope = MainScope()
 
     override fun onDestroy() {
@@ -64,6 +70,7 @@ class PostProcessingActivity : AppCompatActivity() {
 
         bindViews()
         setupProviderSpinner()
+        setupPresetSpinner()
         setupTranslateLangSpinner()
         setupActions()
         loadPreferences()
@@ -74,6 +81,7 @@ class PostProcessingActivity : AppCompatActivity() {
         switchEnabled = findViewById(R.id.switchPpEnabled)
         checkTerminalVisible = findViewById(R.id.checkTerminalVisible)
         spinnerProvider = findViewById(R.id.spinnerProvider)
+        spinnerLlmPreset = findViewById(R.id.spinnerLlmPreset)
         editApiKey = findViewById(R.id.editPpApiKey)
         editEndpoint = findViewById(R.id.editPpEndpoint)
         editModel = findViewById(R.id.editPpModel)
@@ -102,6 +110,44 @@ class PostProcessingActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+    }
+
+    /**
+     * "Custom" plus the known providers. Picking one sets the dialect, address and a model that
+     * exists there; editing the address by hand moves the spinner to whatever matches, or "Custom".
+     */
+    private fun setupPresetSpinner() {
+        val labels = listOf(getString(R.string.preset_custom)) + ProviderPresets.postProcessing.map { it.name }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinnerLlmPreset.adapter = adapter
+
+        spinnerLlmPreset.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position == presetPosSetByCode) {
+                    presetPosSetByCode = -1
+                    return
+                }
+                presetPosSetByCode = -1
+                val preset = ProviderPresets.postProcessing.getOrNull(position - 1) ?: return
+                preset.provider?.let { spinnerProvider.setSelection(providers.indexOf(it)) }
+                editEndpoint.setText(preset.endpoint)
+                editModel.setText(preset.model)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        editEndpoint.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val pos = ProviderPresets.indexOf(ProviderPresets.postProcessing, s?.toString() ?: "") + 1
+                if (spinnerLlmPreset.selectedItemPosition != pos) {
+                    presetPosSetByCode = pos
+                    spinnerLlmPreset.setSelection(pos, false)
+                }
+            }
+        })
     }
 
     private fun setupTranslateLangSpinner() {
@@ -183,10 +229,12 @@ class PostProcessingActivity : AppCompatActivity() {
             endpoint = endpoint,
             model = editModel.text.toString().trim(),
             temperature = temperature.coerceIn(0f, 2f),
-            promptFix = editPromptFix.text.toString().trim(),
-            promptShorten = editPromptShorten.text.toString().trim(),
-            promptEmoji = editPromptEmoji.text.toString().trim(),
-            promptSuffix = editPromptSuffix.text.toString().trim(),
+            // The fields are prefilled with the defaults; saving that text verbatim would pin the
+            // user to this version's wording. Blank means "follow the shipped default".
+            promptFix = PostProcessingPreferences.normalizePrompt(editPromptFix.text.toString(), PostProcessingPreferences.DEFAULT_PROMPT_FIX),
+            promptShorten = PostProcessingPreferences.normalizePrompt(editPromptShorten.text.toString(), PostProcessingPreferences.DEFAULT_PROMPT_SHORTEN),
+            promptEmoji = PostProcessingPreferences.normalizePrompt(editPromptEmoji.text.toString(), PostProcessingPreferences.DEFAULT_PROMPT_EMOJI),
+            promptSuffix = PostProcessingPreferences.normalizePrompt(editPromptSuffix.text.toString(), PostProcessingPreferences.DEFAULT_PROMPT_SUFFIX),
             translateLang = TranscriptionLocale.entries[spinnerTranslateLang.selectedItemPosition].code,
             translateModel = editTranslateModel.text.toString().trim(),
             terminalVisible = checkTerminalVisible.isChecked

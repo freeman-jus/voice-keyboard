@@ -174,6 +174,25 @@ class ParkedRecordingStore(context: Context) {
         if (changed) publish()
     }
 
+    /**
+     * User gave up on the unsent recordings: delete audio and sidecars of every parked item that
+     * is not being retried at this very moment, return the count. The badge counts all states, so
+     * deleting only the permanently-failed ones would leave a badge nothing could clear offline.
+     */
+    suspend fun discardUnsent(): Int = withContext(dispatcher) {
+        loadIfNeeded()
+        val doomed = items.filter { it.id !in inFlight }
+        for (rec in doomed) {
+            items.remove(rec)
+            File(rec.audioPath).delete()
+            File(dir, sidecarName(rec.id)).delete()
+            inFlight.remove(rec.id)
+        }
+        if (doomed.isNotEmpty()) publish()
+        DiagnosticLog.record(TAG, "Discarded ${doomed.size} unsent item(s), total=${items.size}")
+        doomed.size
+    }
+
     private fun enforceCap() {
         while (items.size > MAX_ITEMS) {
             val rec = items.removeAt(0) // drop oldest; keep the most recent dictations

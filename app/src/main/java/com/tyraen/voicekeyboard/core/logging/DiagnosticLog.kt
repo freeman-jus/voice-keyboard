@@ -41,6 +41,11 @@ object DiagnosticLog {
         record(tag, "ERROR $detail")
     }
 
+    fun hasEntries(context: Context): Boolean = synchronized(lock) {
+        val file = File(context.filesDir, ENTRIES_FILE)
+        file.exists() && file.length() > 0L
+    }
+
     fun readEntries(context: Context): String {
         val file = File(context.filesDir, ENTRIES_FILE)
         return synchronized(lock) {

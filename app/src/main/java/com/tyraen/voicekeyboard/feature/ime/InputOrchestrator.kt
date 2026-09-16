@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import com.tyraen.voicekeyboard.R
 import com.tyraen.voicekeyboard.core.config.PostProcessingPreferences
 import com.tyraen.voicekeyboard.core.config.PreferenceStore
 import com.tyraen.voicekeyboard.core.config.UserPreferences
@@ -13,23 +14,33 @@ import com.tyraen.voicekeyboard.feature.audio.MicrophoneCaptureSession
 import com.tyraen.voicekeyboard.feature.transcription.TranscriptionConfig
 import com.tyraen.voicekeyboard.feature.transcription.WhisperPromptBuilder
 import kotlinx.coroutines.*
+import java.io.File
 
 class InputOrchestrator(
     private val context: Context,
     private val preferenceStore: PreferenceStore,
     private val processingQueue: ProcessingQueue,
     private val capture: MicrophoneCaptureSession,
-    private val onTextReady: (String) -> Unit,
+    private val onTextReady: (text: String, addTrailingSpace: Boolean) -> Unit,
     private val onPhaseChanged: (InputPhase) -> Unit,
     private val onAmplitude: (Int) -> Unit,
     private val onQueueCountChanged: (Int) -> Unit,
     private val onProcessingPhaseChanged: (ProcessingQueue.ProcessingPhase) -> Unit,
     private val onFailedCountChanged: (Int) -> Unit = {},
-    private val onPreferencesLoaded: () -> Unit = {}
+    private val onPreferencesLoaded: () -> Unit = {},
+    /** The user tapped the mic without RECORD_AUDIO; the host should start the permission flow. */
+    private val onPermissionNeeded: () -> Unit = {}
 ) {
 
     companion object {
         private const val TAG = "Orchestrator"
+
+        /**
+         * A recording that ends before the preferences finished loading waits for them here, on a
+         * process-wide scope: the view's own scope dies with the view, and that would orphan the
+         * file in the cache.
+         */
+        private val handoverScope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
     }
 
     private val scope = MainScope()
@@ -37,10 +48,14 @@ class InputOrchestrator(
     private var ppPreferences: PostProcessingPreferences? = null
     private var vocabulary: String = ""
 
+    /** Whether the input view is currently shown. Set by the host from its window callbacks. */
+    var viewVisible: Boolean = false
+
     // Forwards the shared queue's callbacks to this view's UI. Bound on creation, unbound on
     // destroy so a torn-down panel stops receiving updates (the next panel rebinds instantly).
     private val queueListener = object : ProcessingQueue.Listener {
-        override fun onTextReady(text: String) = this@InputOrchestrator.onTextReady(text)
+        override fun onTextReady(text: String, addTrailingSpace: Boolean) =
+            this@InputOrchestrator.onTextReady(text, addTrailingSpace)
         override fun onQueueCountChanged(count: Int) = this@InputOrchestrator.onQueueCountChanged(count)
         override fun onProcessingPhaseChanged(phase: ProcessingQueue.ProcessingPhase) =
             this@InputOrchestrator.onProcessingPhaseChanged(phase)
@@ -57,6 +72,11 @@ class InputOrchestrator(
     /** Re-send every recording that failed transcription and is waiting for retry. */
     fun retryFailed() {
         processingQueue.retryFailed()
+    }
+
+    /** Delete every recording that failed permanently; [onDone] receives how many were removed. */
+    fun discardFailed(onDone: (Int) -> Unit) {
+        processingQueue.discardFailed(onDone)
     }
 
     var currentPhase: InputPhase = InputPhase.Ready
@@ -101,8 +121,18 @@ class InputOrchestrator(
         scope.launch {
             loadPreferencesInternal()
             onPreferencesLoaded()
-            if (preferences?.autoRecord == true && currentPhase is InputPhase.Ready) {
-                beginCapture()
+            // Coming back from the permission prompt: the error that sent the user there is stale.
+            val failed = currentPhase as? InputPhase.Failed
+            if (failed?.reasonRes == R.string.error_mic_permission && hasMicPermission()) {
+                moveTo(InputPhase.Ready)
+            }
+            // The load suspends. If the panel was hidden in the meantime, starting now would
+            // record with no window on screen until the next show/hide. Without permission the
+            // idle panel is also better than an error on every appearance; the mic tap asks.
+            if (preferences?.autoRecord == true && viewVisible &&
+                currentPhase is InputPhase.Ready && hasMicPermission()
+            ) {
+                beginCapture(userInitiated = false)
             }
         }
     }
@@ -167,32 +197,54 @@ class InputOrchestrator(
         }
     }
 
-    fun beginCapture() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            moveTo(InputPhase.Failed("Microphone permission required"))
+    private fun hasMicPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    fun beginCapture(userInitiated: Boolean = true) {
+        if (!hasMicPermission()) {
+            moveTo(InputPhase.Failed(R.string.error_mic_permission))
+            if (userInitiated) onPermissionNeeded()
             return
         }
 
         DiagnosticLog.record(TAG, "beginCapture")
+        if (!capture.begin { amplitude -> onAmplitude(amplitude) }) {
+            moveTo(InputPhase.Failed(R.string.error_mic_unavailable))
+            return
+        }
         moveTo(InputPhase.Capturing())
-        capture.begin { amplitude -> onAmplitude(amplitude) }
     }
 
     fun finishCaptureAndEnqueue() {
-        val file = capture.finalize() ?: return
+        val file = capture.finalize()
         val durationMs = capture.lastDurationMs
-        DiagnosticLog.record(TAG, "finishCapture, file=${file.name}, size=${file.length()}, dur=${durationMs}ms")
-
-        val prefs = preferences ?: run {
-            moveTo(InputPhase.Failed("Settings not loaded"))
+        // Back to Ready right away: the user can start the next recording while this one uploads.
+        moveTo(InputPhase.Ready)
+        if (file == null) {
+            DiagnosticLog.record(TAG, "finishCapture: nothing usable captured (${durationMs}ms)")
             return
         }
+        DiagnosticLog.record(TAG, "finishCapture, file=${file.name}, size=${file.length()}, dur=${durationMs}ms")
 
-        if (prefs.apiKey.isBlank()) {
-            moveTo(InputPhase.Failed("API key not set"))
+        val prefs = preferences
+        if (prefs == null) {
+            // Preferences load asynchronously right after the view is created. A recording that
+            // ends before they arrive waits for them instead of being thrown away.
+            handoverScope.launch {
+                loadPreferencesInternal()
+                enqueue(file, durationMs, preferences ?: return@launch)
+            }
             return
+        }
+        enqueue(file, durationMs, prefs)
+    }
+
+    private fun enqueue(file: File, durationMs: Long, prefs: UserPreferences) {
+        if (prefs.apiKey.isBlank()) {
+            // Still queued: the queue parks it as "needs attention", so the recording survives
+            // until a key is entered and resend is tapped.
+            moveTo(InputPhase.Failed(R.string.error_api_key_missing))
         }
 
         val language = prefs.effectiveLanguage
@@ -225,9 +277,6 @@ class InputOrchestrator(
             ppTranslate = ppEnabled && s.translateActive,
             ppTerminal = ppEnabled && s.terminalActive
         )
-
-        // Return to Ready immediately — user can start recording again
-        moveTo(InputPhase.Ready)
         processingQueue.enqueue(item)
     }
 
@@ -260,6 +309,7 @@ class InputOrchestrator(
     }
 
     fun destroy() {
+        // Releases only a capture still in progress; files already handed to the queue are its own.
         capture.release()
         // The queue is a process-wide singleton — never destroy it here, just stop receiving its
         // callbacks. Parked recordings and in-flight work survive this input view.

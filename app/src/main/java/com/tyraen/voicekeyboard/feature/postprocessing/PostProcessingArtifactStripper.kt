@@ -23,9 +23,21 @@ object PostProcessingArtifactStripper {
         Regex("""\n\s*[-*_]{3,}\s*$"""),
     )
 
+    /**
+     * Reasoning models on OpenAI-compatible gateways (Groq qwen3, DeepSeek-R1 distills, QwQ) put
+     * their chain of thought inside `content`, wrapped in tags. Only closed blocks are removed:
+     * a truncated block has no reliable end, and guessing would eat the answer.
+     */
+    private val REASONING_BLOCK =
+        Regex("""<(think|thinking|reasoning|reason|thought|analysis)>.*?</\1>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+
     fun strip(text: String): String {
         if (text.isBlank()) return text
         var s = text
+        if (REASONING_BLOCK.containsMatchIn(s)) {
+            s = REASONING_BLOCK.replace(s, "").trimStart()
+            if (s.isBlank()) return s
+        }
         // Bounded loop: each iteration must remove something or we exit.
         // 16 is generous; real outputs converge in 1–3 passes.
         repeat(16) {

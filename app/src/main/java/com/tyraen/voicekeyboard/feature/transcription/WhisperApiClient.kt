@@ -1,5 +1,6 @@
 package com.tyraen.voicekeyboard.feature.transcription
 
+import com.tyraen.voicekeyboard.feature.postprocessing.PostProcessingResponseParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -43,13 +44,20 @@ class WhisperApiClient(private val http: OkHttpClient) : SpeechToTextClient {
                 http.newCall(request).execute().use { response ->
                     val responseBody = response.body?.string()?.trim() ?: ""
 
+                    // The provider's own message tells a retired or mistyped model apart from a
+                    // wrong address: both are a bare 404 on the status line.
+                    val detail = PostProcessingResponseParser.errorMessage(responseBody)
+                        ?.replace(Regex("\\s+"), " ")?.take(200)
+                    fun failure(base: String) =
+                        Result.failure<String>(Exception(if (detail.isNullOrBlank()) base else "$base ($detail)"))
                     when (response.code) {
                         200 -> Result.success("API key is valid")
-                        401 -> Result.failure(Exception("Invalid API key. Check that the key is correct and active."))
-                        403 -> Result.failure(Exception("Forbidden. The API may be unavailable in your region."))
-                        404 -> Result.failure(Exception("Endpoint not found. Check the API URL."))
-                        429 -> Result.failure(Exception("Rate limit exceeded. Try again later."))
-                        in 500..599 -> Result.failure(Exception("Server error (${response.code}). Try again later."))
+                        401 -> failure("Invalid API key. Check that the key is correct and active.")
+                        403 -> failure("Forbidden. The API may be unavailable in your region.")
+                        404 -> failure("Not found: check the API URL and the model name.")
+                        400, 422 -> failure("Request rejected: check the model name.")
+                        429 -> failure("Rate limit exceeded. Try again later.")
+                        in 500..599 -> failure("Server error (${response.code}). Try again later.")
                         else -> Result.failure(Exception("Error ${response.code}: $responseBody"))
                     }
                 }

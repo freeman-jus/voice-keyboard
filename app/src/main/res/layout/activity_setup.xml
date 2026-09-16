@@ -25,7 +25,60 @@
             android:text="@string/settings_enable_instructions"
             android:textColor="@color/status_text"
             android:textSize="13sp"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="12dp" />
+
+        <!-- Live keyboard state + shortcuts to the system screens -->
+        <TextView
+            android:id="@+id/txtKeyboardStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btnEnableKeyboard"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/keyboard_open_settings"
+                android:textColor="@color/white"
+                android:backgroundTint="@color/mic_idle"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/btnSwitchKeyboard"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/keyboard_switch"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/key_bg" />
+        </LinearLayout>
+
+        <!-- Shown only while this keyboard is the active one: its panel has no letter keys -->
+        <TextView
+            android:id="@+id/txtActiveKeyboardHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/keyboard_status_active"
+            android:textColor="#FBBF24"
+            android:textSize="13sp"
+            android:visibility="gone"
+            android:layout_marginBottom="8dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp" />
 
         <!-- Theme -->
         <TextView
@@ -98,6 +151,20 @@
             android:backgroundTint="@color/mic_idle"
             android:layout_marginBottom="16dp" />
 
+        <!-- Provider preset: fills endpoint + model -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/preset_label"
+            android:textColor="@color/key_text"
+            android:textSize="14sp" />
+        <Spinner
+            android:id="@+id/spinnerSttPreset"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:backgroundTint="@color/mic_idle"
+            android:layout_marginBottom="16dp" />
+
         <!-- Endpoint -->
         <TextView
             android:layout_width="wrap_content"
@@ -125,7 +192,8 @@
             android:id="@+id/editModel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="text"
+            android:inputType="text|textNoSuggestions"
+            android:importantForAutofill="no"
             android:textColor="@color/text_primary"
             android:backgroundTint="@color/mic_idle"
             android:layout_marginBottom="16dp" />
@@ -148,7 +216,8 @@
             android:id="@+id/editLanguage"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="text"
+            android:inputType="text|textNoSuggestions"
+            android:importantForAutofill="no"
             android:textColor="@color/text_primary"
             android:backgroundTint="@color/mic_idle"
             android:layout_marginBottom="16dp" />
@@ -375,6 +444,16 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/logs_save"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/key_bg"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/btnShareLogs"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/logs_share"
                 android:textColor="@color/text_primary"
                 android:backgroundTint="@color/key_bg"
                 android:layout_marginEnd="8dp" />

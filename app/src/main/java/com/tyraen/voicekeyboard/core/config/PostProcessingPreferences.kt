@@ -82,6 +82,27 @@ data class PostProcessingPreferences(
 
         const val DEFAULT_PROMPT_SUFFIX = "Output ONLY the resulting text, no explanations."
 
+        /**
+         * Default prompt texts from earlier releases. The settings screen used to persist the
+         * prefilled default as a user override on Apply, so anyone who pressed Apply stayed on
+         * the wording of that version forever. Stored prompts equal to any of these are treated
+         * as "use the current default" (see [normalizePrompt]).
+         */
+        val LEGACY_DEFAULT_PROMPTS: Set<String> = setOf(
+            "Fix ONLY punctuation and spelling errors. Remove filler/hesitation sounds (um, uh, ммм, э, euh, えーと). " +
+                "Do NOT rephrase, shorten, or rewrite the text in any other way. Keep every word the author used, including profanity.",
+            "Make the text more concise: remove repetitions, filler words, and unnecessary verbosity, but keep ALL key points, " +
+                "details, and arguments. Preserve the author's style and tone. Fix spelling and punctuation. Keep profanity unchanged.",
+            "Add 1 relevant emoji after each sentence-ending mark (.!?). For obvious humor or sarcasm use 2-3 laughing emoji. " +
+                "Use only common everyday emoji. Do NOT change, rephrase, or shorten the text — only insert emoji."
+        )
+
+        /** A prompt that merely repeats a shipped default (current or past) is stored as blank. */
+        fun normalizePrompt(value: String, currentDefault: String): String {
+            val trimmed = value.trim()
+            return if (trimmed == currentDefault || trimmed in LEGACY_DEFAULT_PROMPTS) "" else trimmed
+        }
+
         fun defaultEndpoint(provider: String): String = when (provider) {
             PROVIDER_CLAUDE -> DEFAULT_CLAUDE_ENDPOINT
             else -> DEFAULT_OPENAI_ENDPOINT
@@ -141,6 +162,14 @@ data class PostProcessingPreferences(
             ApiEndpoint.hostOf(resolvedEndpoint()) == ApiEndpoint.hostOf(defaultEndpoint(provider))
         return if (ownApi || model.isBlank()) defaultTranslateModel(provider) else model
     }
+    /** The same preferences with default-repeating prompts blanked out. */
+    fun withNormalizedPrompts(): PostProcessingPreferences = copy(
+        promptFix = normalizePrompt(promptFix, DEFAULT_PROMPT_FIX),
+        promptShorten = normalizePrompt(promptShorten, DEFAULT_PROMPT_SHORTEN),
+        promptEmoji = normalizePrompt(promptEmoji, DEFAULT_PROMPT_EMOJI),
+        promptSuffix = normalizePrompt(promptSuffix, DEFAULT_PROMPT_SUFFIX)
+    )
+
     fun resolvedPromptFix(): String = promptFix.ifBlank { DEFAULT_PROMPT_FIX }
     fun resolvedPromptShorten(): String = promptShorten.ifBlank { DEFAULT_PROMPT_SHORTEN }
     fun resolvedPromptEmoji(): String = promptEmoji.ifBlank { DEFAULT_PROMPT_EMOJI }

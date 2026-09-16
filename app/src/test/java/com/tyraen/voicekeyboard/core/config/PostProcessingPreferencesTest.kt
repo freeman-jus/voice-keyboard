@@ -63,4 +63,34 @@ class PostProcessingPreferencesTest {
         val p = PostProcessingPreferences(provider = PROVIDER_OPENAI, endpoint = "https://openrouter.ai/api/v1")
         assertEquals("gpt-4o", p.resolvedTranslateModel())
     }
+
+    @Test fun `a prompt equal to the current default is stored blank`() {
+        assertEquals("", PostProcessingPreferences.normalizePrompt(PostProcessingPreferences.DEFAULT_PROMPT_FIX, PostProcessingPreferences.DEFAULT_PROMPT_FIX))
+        assertEquals("", PostProcessingPreferences.normalizePrompt("  " + PostProcessingPreferences.DEFAULT_PROMPT_EMOJI + "\n", PostProcessingPreferences.DEFAULT_PROMPT_EMOJI))
+    }
+
+    @Test fun `a prompt equal to a legacy default is stored blank too`() {
+        for (legacy in PostProcessingPreferences.LEGACY_DEFAULT_PROMPTS) {
+            assertEquals("", PostProcessingPreferences.normalizePrompt(legacy, PostProcessingPreferences.DEFAULT_PROMPT_FIX))
+        }
+    }
+
+    @Test fun `a custom prompt survives normalization`() {
+        assertEquals("Be brief.", PostProcessingPreferences.normalizePrompt(" Be brief. ", PostProcessingPreferences.DEFAULT_PROMPT_FIX))
+        assertEquals("", PostProcessingPreferences.normalizePrompt("", PostProcessingPreferences.DEFAULT_PROMPT_FIX))
+    }
+
+    @Test fun `withNormalizedPrompts blanks only the default-repeating slots`() {
+        val prefs = PostProcessingPreferences(
+            promptFix = PostProcessingPreferences.DEFAULT_PROMPT_FIX,
+            promptShorten = "Keep it short.",
+            promptEmoji = PostProcessingPreferences.LEGACY_DEFAULT_PROMPTS.first { it.startsWith("Add 1") },
+            promptSuffix = PostProcessingPreferences.DEFAULT_PROMPT_SUFFIX
+        ).withNormalizedPrompts()
+        assertEquals("", prefs.promptFix)
+        assertEquals("Keep it short.", prefs.promptShorten)
+        assertEquals("", prefs.promptEmoji)
+        assertEquals("", prefs.promptSuffix)
+        assertEquals(PostProcessingPreferences.DEFAULT_PROMPT_FIX, prefs.resolvedPromptFix())
+    }
 }

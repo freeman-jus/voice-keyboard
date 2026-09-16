@@ -46,6 +46,9 @@ class PreferenceStore(private val context: Context) {
 
         // Prominent disclosure for microphone use (shown once before requesting RECORD_AUDIO)
         val MIC_DISCLOSURE_ACCEPTED = booleanPreferencesKey("mic_disclosure_accepted")
+        // Set after an explicit denial with the rationale gone ("Don't ask again"). Android reports
+        // "never asked" and that state identically; this flag tells them apart.
+        val MIC_PERMISSION_DENIED_FOREVER = booleanPreferencesKey("mic_permission_denied_forever")
 
         // Post-processing toggle states (persist between sessions)
         val PP_FIX_ACTIVE = booleanPreferencesKey("pp_fix_active")
@@ -150,6 +153,16 @@ class PreferenceStore(private val context: Context) {
         }
     }
 
+    /**
+     * One-time repair for prompts that were saved as overrides although they only repeated the
+     * shipped default of some version; blanking them lets default improvements reach those users.
+     */
+    suspend fun normalizeStoredPrompts() {
+        val current = loadPostProcessing()
+        val normalized = current.withNormalizedPrompts()
+        if (normalized != current) savePostProcessing(normalized)
+    }
+
     suspend fun isMicDisclosureAccepted(): Boolean {
         val prefs = context.store.data.first()
         return prefs[Keys.MIC_DISCLOSURE_ACCEPTED] ?: false
@@ -158,6 +171,17 @@ class PreferenceStore(private val context: Context) {
     suspend fun setMicDisclosureAccepted() {
         context.store.edit { data ->
             data[Keys.MIC_DISCLOSURE_ACCEPTED] = true
+        }
+    }
+
+    suspend fun isMicPermissionDeniedForever(): Boolean {
+        val prefs = context.store.data.first()
+        return prefs[Keys.MIC_PERMISSION_DENIED_FOREVER] ?: false
+    }
+
+    suspend fun setMicPermissionDeniedForever(value: Boolean) {
+        context.store.edit { data ->
+            data[Keys.MIC_PERMISSION_DENIED_FOREVER] = value
         }
     }
 

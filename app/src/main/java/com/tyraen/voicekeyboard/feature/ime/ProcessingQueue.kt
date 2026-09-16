@@ -51,7 +51,8 @@ class ProcessingQueue(
     /** The IME input view binds one of these so results land in the focused field; rebound on every
      *  view recreation. When nothing is bound (keyboard closed/torn down) results go to clipboard. */
     interface Listener {
-        fun onTextReady(text: String)
+        /** [addTrailingSpace] is the user's setting; the view decides whether a space fits there. */
+        fun onTextReady(text: String, addTrailingSpace: Boolean)
         fun onQueueCountChanged(count: Int)
         fun onProcessingPhaseChanged(phase: ProcessingPhase)
         fun onFailedCountChanged(count: Int)
@@ -66,6 +67,8 @@ class ProcessingQueue(
         // Indefinite background retry: starts fast, backs off, capped. Reset when internet returns.
         private const val INITIAL_RETRY_BACKOFF_MS = 5_000L
         private const val MAX_RETRY_BACKOFF_MS = 5 * 60_000L
+        /** Transcripts up to this length may legitimately post-process to nothing ("um, uh"). */
+        private const val FILLER_MAX_CHARS = 25
     }
 
     data class QueueItem(
@@ -147,6 +150,15 @@ class ProcessingQueue(
         }
     }
 
+    /** User chose to delete the unsent recordings; [onDone] gets the number removed. */
+    fun discardFailed(onDone: (Int) -> Unit) {
+        scope.launch {
+            val removed = store.discardUnsent()
+            DiagnosticLog.record(TAG, "Discarded $removed failed recording(s)")
+            onDone(removed)
+        }
+    }
+
     /** User tapped resend: give permanently-failed items another chance and drain now. */
     fun retryFailed() {
         scope.launch {
@@ -189,6 +201,14 @@ class ProcessingQueue(
         if (!item.audioFile.exists()) {
             DiagnosticLog.record(TAG, "Audio file missing, dropping ${item.audioFile.name}")
             if (item.parkedId != null) store.markDone(item.parkedId)
+            return
+        }
+
+        // No key means no request can succeed: park straight away as "needs attention" and let
+        // resend pick it up once a key has been entered.
+        if (item.transcriptionConfig.apiKey.isBlank()) {
+            DiagnosticLog.record(TAG, "No API key — parking ${item.audioFile.name} for attention")
+            handleFailure(item, permanent = true)
             return
         }
 
@@ -244,20 +264,34 @@ class ProcessingQueue(
         }
         val processed = maybePostProcess(cleanedText, item)
 
-        val output = if (item.addTrailingSpace) "$processed " else processed
-        deliver(output)
+        // The prompts say "output nothing" for filler-only input; honour that instead of typing a
+        // lone space into the field or wiping the clipboard with one. A model that blanks a real
+        // sentence must not lose it, though: anything longer than a few filler sounds falls back
+        // to the transcript, like an LLM error does.
+        val output = if (processed.isBlank()) {
+            if (cleanedText.trim().length <= FILLER_MAX_CHARS) {
+                DiagnosticLog.record(TAG, "Post-processing produced empty text, nothing inserted")
+                if (item.parkedId != null) store.markDone(item.parkedId) else item.audioFile.delete()
+                return
+            }
+            DiagnosticLog.record(TAG, "Post-processing produced empty text for a real sentence, using raw text")
+            cleanedText
+        } else processed
+
+        deliver(output, item.addTrailingSpace)
         if (item.parkedId != null) store.markDone(item.parkedId) else item.audioFile.delete()
     }
 
     /** Deliver finished text to the bound input view, or fall back to the clipboard if none. */
-    private fun deliver(text: String) {
+    private fun deliver(text: String, addTrailingSpace: Boolean) {
         val l = listener
         if (l != null) {
-            l.onTextReady(text)
+            l.onTextReady(text, addTrailingSpace)
         } else {
             try {
                 val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("Voice transcription", text))
+                val clip = if (addTrailingSpace) "$text " else text
+                clipboard.setPrimaryClip(ClipData.newPlainText("Voice transcription", clip))
                 DiagnosticLog.record(TAG, "No input view bound — delivered to clipboard")
             } catch (e: Exception) {
                 DiagnosticLog.recordFailure(TAG, "Clipboard delivery failed", e)

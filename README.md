@@ -32,11 +32,14 @@ Android keyboard (IME) for speech-to-text. Sends audio to any OpenAI-compatible 
 - Modes are switched with toggle buttons right on the keyboard, per recording
 - Works with OpenAI, Claude, or any OpenAI-compatible provider (OpenRouter, Groq, …)
 - Customizable prompts and temperature for each mode
+- Reasoning models work too: their `<think>` blocks are stripped before the text is inserted, and models that reject a custom temperature are retried without it
+- Provider presets (OpenAI, Claude, OpenRouter, Groq, Mistral, DeepSeek) fill in the endpoint and a model that exists there
 
 ### Keyboard
 - **Send button** (paper plane) — sends Ctrl+Enter for quick message sending in messengers
 - **Accelerating backspace** — hold to delete slowly at first, then faster
-- **Punctuation keys** — `.`, `?` and `!` next to the space bar for when dictation gets the punctuation wrong
+- **Punctuation keys** — `.`, `?` and `!` next to the space bar for when dictation gets the punctuation wrong; they swallow the space left by dictation, so "hello " + `.` reads "hello."
+- **Smart spacing** — dictated text gets a space in front when the cursor sits after a word, and never a doubled one before an existing space or full stop
 - **Clipboard bar** stays visible after paste for repeated pasting
 - **Graceful shutdown** — if keyboard hides during recording, audio is finalized and transcribed to clipboard
 
@@ -45,18 +48,19 @@ Android keyboard (IME) for speech-to-text. Sends audio to any OpenAI-compatible 
 - Light, Dark, and Auto themes
 - Long-press spacebar to switch keyboard
 - Built-in test recording in settings
-- App logs and crash reports
+- App logs and crash reports, saved to a file or shared straight from settings
 - Auto-update from GitHub Releases
+- Recordings that failed permanently can be resent or deleted from the keyboard (hold the resend key twice)
 
 ## Setup
 
 1. Install the APK from [Releases](https://github.com/rustemar/voice-keyboard/releases)
-2. Go to Settings → System → Languages & input → On-screen keyboard
-3. Enable "Voice Keyboard"
-4. Open the app and enter a speech-to-text API key. Any OpenAI-compatible Whisper endpoint works:
+2. Open the app and tap **Enable keyboard** (or go to Settings → System → Languages & input → On-screen keyboard)
+3. Enable "Voice Keyboard"; the app shows whether it is enabled and which keyboard is active
+4. Enter a speech-to-text API key. Any OpenAI-compatible Whisper endpoint works:
    - **Groq** (default, free) — get a key at [console.groq.com/keys](https://console.groq.com/keys); nothing else to change.
-   - **Mistral** (free) — get a key at [console.mistral.ai](https://console.mistral.ai/api-keys), then set the endpoint to `https://api.mistral.ai/v1/audio/transcriptions` and the model to `voxtral-mini-latest`.
-   - **OpenAI** or any other compatible provider — set the endpoint and model in the same screen.
+   - **Mistral** (free) — get a key at [console.mistral.ai](https://console.mistral.ai/api-keys), then pick *Mistral* in the provider preset list (or set the endpoint to `https://api.mistral.ai/v1/audio/transcriptions` and the model to `voxtral-mini-latest`).
+   - **OpenAI** or any other compatible provider — pick the preset, or set the endpoint and model in the same screen.
 5. (Optional) Configure post-processing with an OpenAI or Claude API key, or any OpenAI-compatible provider:
    - **OpenRouter** — provider "OpenAI-compatible", endpoint `https://openrouter.ai/api/v1` (the rest of the path is added automatically), model with the vendor prefix, e.g. `openai/gpt-4o-mini`. The translation model can stay empty; it reuses the model you set.
    - Once post-processing is enabled, a row of toggle buttons (fix, shorten, emoji, rhyme, translate) appears on the keyboard above the space bar.
@@ -68,6 +72,15 @@ Android keyboard (IME) for speech-to-text. Sends audio to any OpenAI-compatible 
 1. Install Obtainium from its [releases page](https://github.com/ImranR98/Obtainium/releases) or via [F-Droid](https://apt.izzysoft.de/fdroid/index/apk/dev.imranr.obtainium.fdroid).
 2. In Obtainium, tap **Add App** and paste `https://github.com/rustemar/voice-keyboard`.
 3. Obtainium will install Voice Keyboard and notify you when new releases are published.
+
+## Troubleshooting
+
+- **The keyboard is not in the list** — tap *Enable keyboard* in the app; it opens the system screen where "Voice Keyboard" has to be switched on.
+- **I can't type my API key** — while Voice Keyboard is the active keyboard its panel has no letter keys. The settings screen says so and offers *Switch keyboard*; long-pressing the space bar on the keyboard does the same.
+- **"Microphone permission required"** — tap the mic again and the system prompt appears. After "Don't ask again" the app opens its settings page instead; allow the microphone there.
+- **Apply says "Not found"** — the provider's own message in brackets tells whether the address or the model name is wrong. A retired model looks the same as a wrong URL without it.
+- **A red counter under backspace** — recordings that could not be transcribed yet. Ones waiting for internet resend themselves; tap to resend after fixing a key; hold twice to delete all of them.
+- **Text arrives without a space, or with a stray one** — spacing follows the character next to the cursor; a field that hides its text from keyboards falls back to the configured trailing space.
 
 ## Privacy
 

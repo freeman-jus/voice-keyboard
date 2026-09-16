@@ -11,8 +11,8 @@ android {
         applicationId = "com.tyraen.voicekeyboard"
         minSdk = 24
         targetSdk = 34
-        versionCode = 50
-        versionName = "1.8.9"
+        versionCode = 51
+        versionName = "1.9.0"
     }
 
     signingConfigs {
@@ -22,13 +22,24 @@ android {
             val signingKeyAlias = System.getenv("KEY_ALIAS")
             val signingKeyPassword = System.getenv("KEY_PASSWORD")
 
-            if (keystorePassword != null && signingKeyAlias != null && signingKeyPassword != null) {
+            // Empty, not just missing: CI expands absent secrets (fork PRs) to "" and the
+            // keystore file itself may be missing on a clean clone or a third-party build server.
+            if (!keystorePassword.isNullOrBlank() && !signingKeyAlias.isNullOrBlank() &&
+                !signingKeyPassword.isNullOrBlank() && file(keystorePath).exists()
+            ) {
                 storeFile = file(keystorePath)
                 storePassword = keystorePassword
                 keyAlias = signingKeyAlias
                 keyPassword = signingKeyPassword
             }
         }
+    }
+
+    // The dependency-metadata block AGP embeds in the signing block is meant for Play; F-Droid's
+    // scanner flags it, and nobody else reads it.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     applicationVariants.all {
@@ -42,7 +53,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            // Without credentials the release build stays unsigned instead of failing at
+            // packaging; that is what F-Droid and a clean clone need.
+            signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

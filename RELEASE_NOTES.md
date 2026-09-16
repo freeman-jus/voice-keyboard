@@ -1,3 +1,23 @@
+v1.9.0 — Smarter spacing, sturdier recording, easier setup
+
+- Dictated text gets a space in front when the cursor sits after a word, and never a doubled one before an existing space or full stop; the `.` `?` `!` keys now swallow the space dictation leaves behind, so "hello " + `.` reads "hello."
+- A recording stopped right before switching keyboards or changing the theme could be deleted while it was still uploading; it now always reaches the queue
+- An accidental double tap on the mic no longer produces an unsendable recording with a permanent red badge; captures too short to contain speech are dropped
+- Recordings that failed permanently can be deleted from the keyboard: hold the resend key, then hold it again while the hint is shown
+- A busy or unavailable microphone shows a message instead of crashing the keyboard
+- Uploads are three times smaller (Opus 64 kbps): faster results on mobile data, fewer timeouts
+- Tapping the mic without microphone permission now opens the permission prompt right from the keyboard; after "Don't ask again" it opens the app's settings page
+- The settings screen shows whether the keyboard is enabled and offers "Enable keyboard" and "Switch keyboard" buttons, plus a hint when Voice Keyboard is the active keyboard and its panel cannot type into the fields
+- Provider presets on both settings screens fill in the address and a model that exists there (Groq, OpenAI, Mistral for speech; OpenAI, Claude, OpenRouter, Groq, Mistral, DeepSeek for post-processing)
+- Reasoning models work with post-processing: their thinking blocks are removed from the output, and models that reject a custom temperature are retried without it; the temperature setting now applies to Claude as well
+- A recording made before an API key is entered is kept with the red badge instead of being lost; enter the key and tap resend
+- Prompt improvements now reach everyone: pressing Apply no longer pins you to the prompt wording of that version
+- A wrong or retired speech-to-text model name is reported with the provider's own message instead of "check the URL"
+- Empty post-processing results no longer insert a stray space or overwrite the clipboard
+- Logs and crash reports can be shared straight from settings and carry the app version
+- Keyboard status messages and setup-screen texts are translated in all 17 languages
+- Release builds without signing credentials produce an unsigned APK instead of failing, and the Play-only dependency metadata block is no longer embedded
+
 v1.8.9 — OpenRouter and other OpenAI-compatible providers made easy
 
 - Post-processing accepts a provider's base URL (e.g. https://openrouter.ai/api/v1) and completes the path automatically; the speech-to-text endpoint gets the same treatment, and a missing https:// is added

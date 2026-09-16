@@ -2,6 +2,7 @@ package com.tyraen.voicekeyboard.core.logging
 
 import android.content.Context
 import android.os.Build
+import com.tyraen.voicekeyboard.BuildConfig
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -32,6 +33,7 @@ object FaultCapture {
             val report = buildString {
                 appendLine("=== Voice Keyboard Crash Report ===")
                 appendLine("Time: $stamp")
+                appendLine("App: v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 appendLine("Thread: ${thread.name}")
                 appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
                 appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")

@@ -2,13 +2,13 @@
 
 **Voice Keyboard** is an Android keyboard (input method) that converts speech to text using third‑party transcription APIs. This document describes what data the app handles, where it goes, and what stays on your device.
 
-_Last updated: 2026‑04‑25_
+_Last updated: 2026‑09‑16_
 
 ## TL;DR
 
 - The app does **not** collect, sell, or transmit any analytics, telemetry, advertising IDs, or device identifiers.
-- Audio you record is sent **only** to the speech‑to‑text provider you configure (Groq Whisper or OpenAI Whisper), using **your own API key**.
-- Optional post‑processing sends the transcribed text to OpenAI or Anthropic, again using **your own API key**.
+- Audio you record is sent **only** to the speech‑to‑text provider you configure (Groq, OpenAI, Mistral or any OpenAI‑compatible endpoint), using **your own API key**.
+- Optional post‑processing sends the transcribed text to the language‑model provider you configure (OpenAI, Anthropic, or an OpenAI‑compatible one such as OpenRouter, Groq, Mistral or DeepSeek), again using **your own API key**.
 - All settings, API keys, diagnostic logs, and crash reports stay on your device. They are explicitly excluded from Google Drive backup and device‑transfer.
 - The app is open source: <https://github.com/rustemar/voice-keyboard>.
 
@@ -16,24 +16,27 @@ _Last updated: 2026‑04‑25_
 
 ### Audio
 
-When you press the microphone button, the app records audio from the device microphone and sends it to the transcription endpoint you configured in settings (by default, Groq Whisper). The audio is sent over HTTPS together with your API key. The app does **not** store audio after transcription; recordings live briefly in the app's private cache directory and are deleted as soon as the request completes (or fails).
+When you press the microphone button, the app records audio from the device microphone and sends it to the transcription endpoint you configured in settings (by default, Groq Whisper). The audio is sent over HTTPS together with your API key. The app does **not** keep audio after a successful transcription: recordings live briefly in the app's private cache directory and are deleted as soon as the text comes back. A recording that could **not** be transcribed is kept in the app's private storage. If the cause was no internet, it is resent automatically once the connection returns and deleted after a successful send; if the provider rejected it (wrong key, provider error), it waits until you tap the resend key. Either way you can delete every unsent recording from the keyboard by holding the resend key twice. Nothing leaves the device meanwhile.
 
 The app does **not** receive a copy of the audio after sending — handling and retention of submitted audio is governed by the policy of the provider you choose:
 
 - Groq: <https://groq.com/privacy-policy/>
 - OpenAI: <https://openai.com/policies/privacy-policy>
+- Mistral: <https://mistral.ai/terms/#privacy-policy>
 
 ### Transcribed text
 
-The text returned by the transcription provider is inserted into the app you are typing in (as if you typed it yourself). If you enable a post‑processing mode (Fix, Shorten, Emoji, Rhyme, Translate, Terminal), the transcribed text is additionally sent to the post‑processing provider you selected (OpenAI or Anthropic) using your own API key, and the cleaned‑up text replaces the original.
+The text returned by the transcription provider is inserted into the app you are typing in (as if you typed it yourself). If you enable a post‑processing mode (Fix, Shorten, Emoji, Rhyme, Translate, Terminal), the transcribed text is additionally sent to the post‑processing provider you selected using your own API key, and the cleaned‑up text replaces the original.
 
 - Anthropic: <https://www.anthropic.com/legal/privacy>
+- OpenRouter: <https://openrouter.ai/privacy>
+- DeepSeek: <https://platform.deepseek.com/downloads/DeepSeek%20Privacy%20Policy.html>
 
 If post‑processing is disabled (the default for most modes), no third‑party request is made for text — the Whisper response is inserted directly.
 
 ### API keys
 
-Your Groq, OpenAI, and Anthropic API keys are stored on your device using Android's `DataStore`, in the app's private storage. They are:
+Your API keys are stored on your device using Android's `DataStore`, in the app's private storage. They are:
 
 - never logged,
 - never sent to any server other than the corresponding provider's own API,
@@ -49,11 +52,11 @@ Your preferences (selected language, theme, post‑processing mode, prompt text,
 
 The app keeps a small ring‑buffered log file (`app_log.txt`, capped at 500 lines) in its private storage to help you debug issues. The log records technical events such as "recording started", "transcription succeeded", HTTP error codes, and similar. It does **not** record API keys, and only the first 50 characters of any transcribed text are written, solely to verify that the right text came back during local debugging.
 
-The log is visible to you via the in‑app **Logs** screen and can be saved or cleared from there. It is never uploaded.
+The log can be saved to a file, shared through any app you choose, or cleared from the **Logs** section of the settings screen. It is never uploaded on its own.
 
 ### Crash reports
 
-If the app crashes, an uncaught‑exception handler writes a single crash report (timestamp, thread, device model, Android version, full stack trace) to the app's private storage. On next launch you are shown a dialog offering to **save** that report to a file you can share with the developer for debugging. There is no automatic upload — the report only leaves your device if you explicitly save and share it.
+If the app crashes, an uncaught‑exception handler writes a single crash report (timestamp, thread, device model, Android version, full stack trace) to the app's private storage. On next launch you are shown a dialog offering to **share** or **save** that report so you can pass it to the developer for debugging. There is no automatic upload — the report only leaves your device if you explicitly share it.
 
 The pending crash file is deleted whether you choose to save it or not.
 
@@ -79,6 +82,7 @@ The only outbound network requests the app ever makes are:
 
 1. To the transcription endpoint you configured (default: `api.groq.com`).
 2. To the post‑processing endpoint you configured, if you use post‑processing (default: `api.anthropic.com`).
+   Provider presets in the settings only fill in an address; no request is made until you record or press Apply.
 3. To the GitHub Releases API to check whether a newer version of the app exists, and — if you accept the update — to GitHub's download URL for the APK.
 
 You can verify all of the above by reading the source.

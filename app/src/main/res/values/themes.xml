@@ -5,4 +5,13 @@
         <item name="android:statusBarColor">@color/keyboard_bg</item>
         <item name="android:windowBackground">@color/keyboard_bg</item>
     </style>
+
+    <!-- Invisible host for the microphone permission prompt launched from the keyboard. -->
+    <style name="Theme.VoiceKeyboard.Transparent">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
 </resources>
