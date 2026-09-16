@@ -15,16 +15,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # v6 moved the default cache implementation to a proprietary Gradle service.
+          # 'basic' keeps the MIT, GitHub-hosted one; on tag builds the cache is read-only
+          # anyway, so there is nothing to gain from the commercial path.
+          cache-provider: basic
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
@@ -62,7 +67,7 @@ jobs:
           echo "sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: VoiceKeyboard-${{ steps.version.outputs.name }}-${{ steps.version.outputs.sha }}
           path: app/build/outputs/apk/release/*.apk
@@ -93,7 +98,9 @@ jobs:
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        # Third-party action pinned to a commit: this step runs after the signing keystore
+        # has been decoded into the workspace, so a moving tag is not good enough.
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: app/build/outputs/apk/release/*.apk
           name: ${{ steps.notes.outputs.title }}
