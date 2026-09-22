@@ -144,4 +144,11 @@
     <string name="crash_save_failed">Bericht konnte nicht gespeichert werden</string>
     <string name="preset_label">Anbieter-Voreinstellung</string>
     <string name="preset_custom">Benutzerdefiniert</string>
+    <string name="update_check_auto">Auf GitHub nach Updates suchen</string>
+    <string name="update_check_auto_hint">Standardmäßig aus. So bezogene Updates kommen direkt vom Entwickler und werden nicht von dem App-Store geprüft, über den du die App installiert hast, zum Beispiel F-Droid.</string>
+    <string name="update_consent_title">Auf GitHub nach Updates suchen?</string>
+    <string name="update_consent_body">Voice Keyboard kann GitHub Releases nach einer neueren Version durchsuchen und sie für dich installieren.\n\nSo bezogene Updates kommen direkt vom Entwickler. Sie werden nicht von dem App-Store geprüft, über den du die App installiert hast, etwa F-Droid, und dessen Prüfungen gelten für sie nicht.\n\nDie Suche bleibt aus, bis du sie einschaltest, und du kannst das jederzeit in den Einstellungen ändern.</string>
+    <string name="update_consent_enable">Einschalten</string>
+    <string name="update_consent_decline">Aus lassen</string>
+    <string name="update_source_disclosure">Dieses APK wird von GitHub Releases geladen. Es kommt direkt vom Entwickler und wird nicht von dem App-Store geprüft, über den du installiert hast.</string>
 </resources>

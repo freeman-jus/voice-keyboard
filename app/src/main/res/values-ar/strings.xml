@@ -144,4 +144,11 @@
     <string name="crash_save_failed">تعذر حفظ التقرير</string>
     <string name="preset_label">إعداد مسبق للمزوّد</string>
     <string name="preset_custom">مخصص</string>
+    <string name="update_check_auto">التحقق من التحديثات على GitHub</string>
+    <string name="update_check_auto_hint">مُعطّل افتراضيًا. التحديثات التي تُجلب بهذه الطريقة تأتي مباشرةً من المطوّر ولا يراجعها متجر التطبيقات الذي ثبّتَ منه التطبيق، مثل F-Droid.</string>
+    <string name="update_consent_title">التحقق من التحديثات على GitHub؟</string>
+    <string name="update_consent_body">يمكن لـ Voice Keyboard التحقق من GitHub Releases بحثًا عن إصدار أحدث وتثبيته نيابةً عنك.\n\nالتحديثات التي تُجلب بهذه الطريقة تأتي مباشرةً من المطوّر. لا يراجعها متجر التطبيقات الذي ثبّتَ منه التطبيق، مثل F-Droid، ولا تنطبق عليها فحوصاته.\n\nيبقى التحقق مُعطّلًا حتى تُفعّله، ويمكنك تغيير ذلك في أي وقت من الإعدادات.</string>
+    <string name="update_consent_enable">تفعيل</string>
+    <string name="update_consent_decline">إبقاؤه مُعطّلًا</string>
+    <string name="update_source_disclosure">يُنزَّل ملف APK هذا من GitHub Releases. يأتي مباشرةً من المطوّر ولا يراجعه المتجر الذي ثبّتَ منه.</string>
 </resources>

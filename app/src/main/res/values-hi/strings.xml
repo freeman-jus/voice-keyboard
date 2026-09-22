@@ -144,4 +144,11 @@
     <string name="crash_save_failed">रिपोर्ट सहेजी नहीं जा सकी</string>
     <string name="preset_label">प्रदाता प्रीसेट</string>
     <string name="preset_custom">कस्टम</string>
+    <string name="update_check_auto">GitHub पर अपडेट जाँचें</string>
+    <string name="update_check_auto_hint">डिफ़ॉल्ट रूप से बंद। इस तरह लिए गए अपडेट सीधे डेवलपर से आते हैं और जिस ऐप स्टोर से आपने ऐप इंस्टॉल किया है, जैसे F-Droid, उसकी समीक्षा से नहीं गुज़रते।</string>
+    <string name="update_consent_title">GitHub पर अपडेट जाँचें?</string>
+    <string name="update_consent_body">Voice Keyboard नए संस्करण के लिए GitHub Releases जाँच सकता है और उसे आपके लिए इंस्टॉल कर सकता है।\n\nइस तरह लिए गए अपडेट सीधे डेवलपर से आते हैं। जिस ऐप स्टोर से आपने ऐप इंस्टॉल किया है, जैसे F-Droid, वह इनकी समीक्षा नहीं करता और उसकी जाँचें इन पर लागू नहीं होतीं।\n\nजब तक आप इसे चालू नहीं करते, जाँच बंद रहती है, और आप इसे कभी भी सेटिंग में बदल सकते हैं।</string>
+    <string name="update_consent_enable">चालू करें</string>
+    <string name="update_consent_decline">बंद रहने दें</string>
+    <string name="update_source_disclosure">यह APK GitHub Releases से डाउनलोड होता है। यह सीधे डेवलपर से आता है और जिस स्टोर से आपने इंस्टॉल किया उसकी समीक्षा से नहीं गुज़रता।</string>
 </resources>

@@ -144,4 +144,11 @@
     <string name="crash_save_failed">Raporttia ei voitu tallentaa</string>
     <string name="preset_label">Palveluntarjoajan esiasetus</string>
     <string name="preset_custom">Mukautettu</string>
+    <string name="update_check_auto">Tarkista päivitykset GitHubista</string>
+    <string name="update_check_auto_hint">Oletuksena pois päältä. Näin haetut päivitykset tulevat suoraan kehittäjältä, eikä niitä tarkasta se sovelluskauppa, josta asensit sovelluksen, esimerkiksi F-Droid.</string>
+    <string name="update_consent_title">Tarkistetaanko päivitykset GitHubista?</string>
+    <string name="update_consent_body">Voice Keyboard voi tarkistaa GitHub Releasesista uudemman version ja asentaa sen puolestasi.\n\nNäin haetut päivitykset tulevat suoraan kehittäjältä. Niitä ei tarkasta se sovelluskauppa, josta asensit sovelluksen, kuten F-Droid, eivätkä sen tarkistukset koske niitä.\n\nTarkistus pysyy pois päältä, kunnes otat sen käyttöön, ja voit muuttaa tätä milloin tahansa asetuksista.</string>
+    <string name="update_consent_enable">Ota käyttöön</string>
+    <string name="update_consent_decline">Jätä pois päältä</string>
+    <string name="update_source_disclosure">Tämä APK ladataan GitHub Releasesista. Se tulee suoraan kehittäjältä, eikä sitä tarkasta kauppa, josta asensit.</string>
 </resources>

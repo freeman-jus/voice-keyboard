@@ -11,8 +11,8 @@ android {
         applicationId = "com.tyraen.voicekeyboard"
         minSdk = 24
         targetSdk = 34
-        versionCode = 51
-        versionName = "1.9.0"
+        versionCode = 52
+        versionName = "1.9.1"
     }
 
     signingConfigs {
@@ -54,8 +54,10 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             // Without credentials the release build stays unsigned instead of failing at
-            // packaging; that is what F-Droid and a clean clone need.
-            signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
+            // packaging; that is what F-Droid and a clean clone need. findByName, not getByName:
+            // F-Droid's build server strips the signingConfigs block above before building, and
+            // getByName on the then-missing config throws at configuration time.
+            signingConfig = signingConfigs.findByName("release")?.takeIf { it.storeFile != null }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -144,4 +144,11 @@
     <string name="crash_save_failed">无法保存报告</string>
     <string name="preset_label">服务商预设</string>
     <string name="preset_custom">自定义</string>
+    <string name="update_check_auto">在 GitHub 上检查更新</string>
+    <string name="update_check_auto_hint">默认关闭。以此方式获取的更新直接来自开发者，未经你安装应用所用应用商店（例如 F-Droid）的审核。</string>
+    <string name="update_consent_title">在 GitHub 上检查更新？</string>
+    <string name="update_consent_body">Voice Keyboard 可以在 GitHub Releases 上检查新版本并为你安装。\n\n以此方式获取的更新直接来自开发者。它们未经你安装应用所用应用商店（如 F-Droid）的审核，该商店的检查也不适用于它们。\n\n在你开启之前，检查一直处于关闭状态，你可以随时在设置中更改。</string>
+    <string name="update_consent_enable">开启</string>
+    <string name="update_consent_decline">保持关闭</string>
+    <string name="update_source_disclosure">此 APK 从 GitHub Releases 下载。它直接来自开发者，未经你安装所用商店的审核。</string>
 </resources>

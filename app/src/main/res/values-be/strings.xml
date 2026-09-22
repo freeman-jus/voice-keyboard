@@ -144,4 +144,11 @@
     <string name="crash_save_failed">Не ўдалося захаваць справаздачу</string>
     <string name="preset_label">Гатовыя налады правайдара</string>
     <string name="preset_custom">Свае</string>
+    <string name="update_check_auto">Правяраць абнаўленні на GitHub</string>
+    <string name="update_check_auto_hint">Па змаўчанні выключана. Абнаўленні, атрыманыя так, прыходзяць напрамую ад распрацоўшчыка і не праходзяць праверку крамы праграм, з якой вы ўсталявалі праграму, напрыклад F-Droid.</string>
+    <string name="update_consent_title">Правяраць абнаўленні на GitHub?</string>
+    <string name="update_consent_body">Voice Keyboard можа правяраць GitHub Releases на наяўнасць новай версіі і ўсталёўваць яе.\n\nАбнаўленні, атрыманыя так, прыходзяць напрамую ад распрацоўшчыка. Яны не праходзяць праверку крамы праграм, з якой вы ўсталявалі праграму, напрыклад F-Droid, і яе праверкі на іх не распаўсюджваюцца.\n\nПраверка выключана, пакуль вы яе не ўключыце, і гэта можна змяніць у наладах у любы момант.</string>
+    <string name="update_consent_enable">Уключыць</string>
+    <string name="update_consent_decline">Пакінуць выключанай</string>
+    <string name="update_source_disclosure">Гэты APK спампоўваецца з GitHub Releases. Ён прыходзіць напрамую ад распрацоўшчыка і не праходзіць праверку крамы праграм, з якой вы ўсталявалі праграму.</string>
 </resources>

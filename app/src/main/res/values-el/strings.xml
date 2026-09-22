@@ -144,4 +144,11 @@
     <string name="crash_save_failed">Δεν ήταν δυνατή η αποθήκευση της αναφοράς</string>
     <string name="preset_label">Προεπιλογή παρόχου</string>
     <string name="preset_custom">Προσαρμοσμένο</string>
+    <string name="update_check_auto">Έλεγχος ενημερώσεων στο GitHub</string>
+    <string name="update_check_auto_hint">Απενεργοποιημένο από προεπιλογή. Οι ενημερώσεις που λαμβάνονται έτσι έρχονται απευθείας από τον προγραμματιστή και δεν ελέγχονται από το κατάστημα εφαρμογών από το οποίο εγκαταστήσατε την εφαρμογή, για παράδειγμα το F-Droid.</string>
+    <string name="update_consent_title">Έλεγχος ενημερώσεων στο GitHub;</string>
+    <string name="update_consent_body">Το Voice Keyboard μπορεί να ελέγχει το GitHub Releases για νεότερη έκδοση και να την εγκαθιστά για εσάς.\n\nΟι ενημερώσεις που λαμβάνονται έτσι έρχονται απευθείας από τον προγραμματιστή. Δεν ελέγχονται από το κατάστημα εφαρμογών από το οποίο εγκαταστήσατε την εφαρμογή, όπως το F-Droid, και οι έλεγχοί του δεν ισχύουν για αυτές.\n\nΟ έλεγχος παραμένει ανενεργός μέχρι να τον ενεργοποιήσετε και μπορείτε να το αλλάξετε ανά πάσα στιγμή στις ρυθμίσεις.</string>
+    <string name="update_consent_enable">Ενεργοποίηση</string>
+    <string name="update_consent_decline">Να παραμείνει ανενεργό</string>
+    <string name="update_source_disclosure">Αυτό το APK λαμβάνεται από το GitHub Releases. Έρχεται απευθείας από τον προγραμματιστή και δεν ελέγχεται από το κατάστημα από το οποίο εγκαταστήσατε.</string>
 </resources>

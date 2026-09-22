@@ -144,4 +144,11 @@
     <string name="crash_save_failed">レポートを保存できませんでした</string>
     <string name="preset_label">プロバイダーのプリセット</string>
     <string name="preset_custom">カスタム</string>
+    <string name="update_check_auto">GitHub で更新を確認する</string>
+    <string name="update_check_auto_hint">既定ではオフです。この方法で取得した更新は開発者から直接届き、アプリをインストールしたアプリストア（例: F-Droid）の審査を受けていません。</string>
+    <string name="update_consent_title">GitHub で更新を確認しますか？</string>
+    <string name="update_consent_body">Voice Keyboard は GitHub Releases で新しいバージョンを確認し、インストールできます。\n\nこの方法で取得した更新は開発者から直接届きます。アプリをインストールしたアプリストア（F-Droid など）の審査は受けておらず、そのチェックも適用されません。\n\nオンにするまで確認は行われません。設定でいつでも変更できます。</string>
+    <string name="update_consent_enable">オンにする</string>
+    <string name="update_consent_decline">オフのままにする</string>
+    <string name="update_source_disclosure">この APK は GitHub Releases からダウンロードされます。開発者から直接届き、インストール元のストアの審査は受けていません。</string>
 </resources>

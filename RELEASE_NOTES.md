@@ -1,3 +1,9 @@
+v1.9.1 — Update check is now opt-in
+
+- The app no longer checks GitHub for new versions on its own. It asks once, on an early launch, and the switch lives in settings under "Check GitHub for updates"
+- Updates fetched that way come straight from the developer and are not reviewed by the app store the app was installed from; every update offer now says so before anything is downloaded
+- Store listing text, screenshots and a rendered app icon are now part of the repository, which is what F-Droid reads to build the listing
+
 v1.9.0 — Smarter spacing, sturdier recording, easier setup
 
 - Dictated text gets a space in front when the cursor sits after a word, and never a doubled one before an existing space or full stop; the `.` `?` `!` keys now swallow the space dictation leaves behind, so "hello " + `.` reads "hello."

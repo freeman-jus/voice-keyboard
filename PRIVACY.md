@@ -2,7 +2,7 @@
 
 **Voice Keyboard** is an Android keyboard (input method) that converts speech to text using third‑party transcription APIs. This document describes what data the app handles, where it goes, and what stays on your device.
 
-_Last updated: 2026‑09‑16_
+_Last updated: 2026‑09‑22_
 
 ## TL;DR
 
@@ -66,7 +66,7 @@ The pending crash file is deleted whether you choose to save it or not.
 |---|---|
 | `RECORD_AUDIO` | To capture your voice when you press the microphone button. Used only while the keyboard is visible and you have started a recording. |
 | `INTERNET` | To send the recorded audio to the transcription provider you configured, and to send transcribed text to the post‑processing provider when you use that feature. |
-| `REQUEST_INSTALL_PACKAGES` | To let you install the latest version directly from inside the app. The auto‑update feature checks GitHub Releases on app launch and offers to download and install a newer APK signed with the same key. You can ignore the prompt; you can also obtain updates entirely outside the app (e.g. via Obtainium or by downloading the APK from GitHub manually). |
+| `REQUEST_INSTALL_PACKAGES` | To let you install the latest version directly from inside the app, **if** you switch the GitHub update check on — it is off by default. When enabled, the app checks GitHub Releases and offers to download and install a newer APK signed with the same key. You can also obtain updates entirely outside the app (e.g. via Obtainium, F‑Droid, or by downloading the APK from GitHub manually). |
 
 The app does **not** request access to contacts, SMS, location, photos, files outside its own sandbox, or any system identifier.
 
@@ -83,13 +83,15 @@ The only outbound network requests the app ever makes are:
 1. To the transcription endpoint you configured (default: `api.groq.com`).
 2. To the post‑processing endpoint you configured, if you use post‑processing (default: `api.anthropic.com`).
    Provider presets in the settings only fill in an address; no request is made until you record or press Apply.
-3. To the GitHub Releases API to check whether a newer version of the app exists, and — if you accept the update — to GitHub's download URL for the APK.
+3. To the GitHub Releases API to check whether a newer version of the app exists — **only if you turned the update check on**, which is off by default — and, if you accept the update, to GitHub's download URL for the APK.
 
 You can verify all of the above by reading the source.
 
 ## Updates
 
-The app polls `https://api.github.com/repos/rustemar/voice-keyboard/releases` when you open the setup screen, to check for newer versions. If a newer release exists, you are shown the changelog and offered the choice to download the APK. No request is made to GitHub if you don't open the setup screen.
+The update check is **off by default**. The app asks once — on a launch after you have acknowledged the microphone notice — whether it may check GitHub for new versions, explaining that updates obtained this way come straight from the developer and are not reviewed by the app store you installed from; declining is remembered and the switch stays in settings under "Check GitHub for updates".
+
+While it is off, the app never contacts GitHub on its own. While it is on, it polls `https://api.github.com/repos/rustemar/voice-keyboard/releases` when you open the setup screen. The "Check for updates" button works either way, because pressing it is itself a deliberate request. If a newer release exists you are shown the changelog, told where the file comes from, and offered the choice to download the APK.
 
 GitHub's privacy policy applies to those requests: <https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement>.
 

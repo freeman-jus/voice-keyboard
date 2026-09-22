@@ -46,6 +46,11 @@ class PreferenceStore(private val context: Context) {
 
         // Prominent disclosure for microphone use (shown once before requesting RECORD_AUDIO)
         val MIC_DISCLOSURE_ACCEPTED = booleanPreferencesKey("mic_disclosure_accepted")
+        // GitHub update check. Off until the user turns it on: downloading an APK outside the
+        // store the app came from needs explicit, informed consent (F-Droid inclusion policy).
+        val UPDATE_CHECK_ENABLED = booleanPreferencesKey("update_check_enabled")
+        val UPDATE_CONSENT_SHOWN = booleanPreferencesKey("update_consent_shown")
+
         // Set after an explicit denial with the rationale gone ("Don't ask again"). Android reports
         // "never asked" and that state identically; this flag tells them apart.
         val MIC_PERMISSION_DENIED_FOREVER = booleanPreferencesKey("mic_permission_denied_forever")
@@ -171,6 +176,31 @@ class PreferenceStore(private val context: Context) {
     suspend fun setMicDisclosureAccepted() {
         context.store.edit { data ->
             data[Keys.MIC_DISCLOSURE_ACCEPTED] = true
+        }
+    }
+
+    /** Whether the app may poll GitHub Releases on its own. Default false. */
+    suspend fun isUpdateCheckEnabled(): Boolean {
+        val prefs = context.store.data.first()
+        return prefs[Keys.UPDATE_CHECK_ENABLED] ?: false
+    }
+
+    suspend fun setUpdateCheckEnabled(value: Boolean) {
+        context.store.edit { data ->
+            data[Keys.UPDATE_CHECK_ENABLED] = value
+            data[Keys.UPDATE_CONSENT_SHOWN] = true
+        }
+    }
+
+    /** Whether the one-time "may I check for updates?" dialog has been answered. */
+    suspend fun isUpdateConsentShown(): Boolean {
+        val prefs = context.store.data.first()
+        return prefs[Keys.UPDATE_CONSENT_SHOWN] ?: false
+    }
+
+    suspend fun setUpdateConsentShown() {
+        context.store.edit { data ->
+            data[Keys.UPDATE_CONSENT_SHOWN] = true
         }
     }
 

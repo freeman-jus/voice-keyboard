@@ -144,4 +144,11 @@
     <string name="crash_save_failed">Impossibile salvare il rapporto</string>
     <string name="preset_label">Preset del provider</string>
     <string name="preset_custom">Personalizzato</string>
+    <string name="update_check_auto">Cercare aggiornamenti su GitHub</string>
+    <string name="update_check_auto_hint">Disattivato per impostazione predefinita. Gli aggiornamenti ottenuti così arrivano direttamente dallo sviluppatore e non sono verificati dallo store da cui hai installato l\'app, ad esempio F-Droid.</string>
+    <string name="update_consent_title">Cercare aggiornamenti su GitHub?</string>
+    <string name="update_consent_body">Voice Keyboard può consultare GitHub Releases per trovare una versione più recente e installarla al posto tuo.\n\nGli aggiornamenti ottenuti così arrivano direttamente dallo sviluppatore. Non sono verificati dallo store da cui hai installato l\'app, come F-Droid, e i suoi controlli non si applicano a essi.\n\nIl controllo resta disattivato finché non lo attivi, e puoi cambiarlo in qualsiasi momento nelle impostazioni.</string>
+    <string name="update_consent_enable">Attiva</string>
+    <string name="update_consent_decline">Lascia disattivato</string>
+    <string name="update_source_disclosure">Questo APK viene scaricato da GitHub Releases. Arriva direttamente dallo sviluppatore e non è verificato dallo store da cui hai installato.</string>
 </resources>

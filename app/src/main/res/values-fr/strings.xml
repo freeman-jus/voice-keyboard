@@ -144,4 +144,11 @@
     <string name="crash_save_failed">Impossible d\'enregistrer le rapport</string>
     <string name="preset_label">Préréglage du fournisseur</string>
     <string name="preset_custom">Personnalisé</string>
+    <string name="update_check_auto">Chercher les mises à jour sur GitHub</string>
+    <string name="update_check_auto_hint">Désactivé par défaut. Les mises à jour obtenues ainsi viennent directement du développeur et ne sont pas vérifiées par la boutique d\'applications depuis laquelle vous avez installé l\'application, par exemple F-Droid.</string>
+    <string name="update_consent_title">Chercher les mises à jour sur GitHub ?</string>
+    <string name="update_consent_body">Voice Keyboard peut consulter GitHub Releases pour trouver une version plus récente et l\'installer pour vous.\n\nLes mises à jour obtenues ainsi viennent directement du développeur. Elles ne sont pas vérifiées par la boutique d\'applications depuis laquelle vous avez installé l\'application, comme F-Droid, et ses contrôles ne s\'y appliquent pas.\n\nLa vérification reste désactivée tant que vous ne l\'activez pas, et vous pouvez changer cela à tout moment dans les paramètres.</string>
+    <string name="update_consent_enable">Activer</string>
+    <string name="update_consent_decline">Laisser désactivé</string>
+    <string name="update_source_disclosure">Cet APK est téléchargé depuis GitHub Releases. Il vient directement du développeur et n\'est pas vérifié par la boutique depuis laquelle vous avez installé.</string>
 </resources>

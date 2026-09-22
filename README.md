@@ -49,7 +49,7 @@ Android keyboard (IME) for speech-to-text. Sends audio to any OpenAI-compatible 
 - Long-press spacebar to switch keyboard
 - Built-in test recording in settings
 - App logs and crash reports, saved to a file or shared straight from settings
-- Auto-update from GitHub Releases
+- Optional update check from GitHub Releases (off by default; the app asks once and the switch is in settings)
 - Recordings that failed permanently can be resent or deleted from the keyboard (hold the resend key twice)
 
 ## Setup
@@ -67,7 +67,7 @@ Android keyboard (IME) for speech-to-text. Sends audio to any OpenAI-compatible 
 
 ### Installing via Obtainium (recommended)
 
-[Obtainium](https://github.com/ImranR98/Obtainium) is a third-party Android app that auto-updates apps directly from GitHub Releases. Recommended over the in-app updater if you want to avoid the system "install unknown apps" prompt and Play Protect warnings on each manual install.
+[Obtainium](https://github.com/ImranR98/Obtainium) is a third-party Android app that auto-updates apps directly from GitHub Releases. Recommended over the in-app update check if you want to avoid the system "install unknown apps" prompt and Play Protect warnings on each manual install.
 
 1. Install Obtainium from its [releases page](https://github.com/ImranR98/Obtainium/releases) or via [F-Droid](https://apt.izzysoft.de/fdroid/index/apk/dev.imranr.obtainium.fdroid).
 2. In Obtainium, tap **Add App** and paste `https://github.com/rustemar/voice-keyboard`.

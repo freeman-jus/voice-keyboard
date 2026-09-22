@@ -53,6 +53,7 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var switchAutoRecord: Switch
     private lateinit var switchAddSpace: Switch
     private lateinit var switchSingleWordStripPunct: Switch
+    private lateinit var switchUpdateCheck: Switch
     private lateinit var txtApiStatus: TextView
     private lateinit var txtTestResult: TextView
     private lateinit var txtTestStatus: TextView
@@ -86,6 +87,9 @@ class SetupActivity : AppCompatActivity() {
     /** Position the code itself put the preset spinner at; its echo callback is ignored. */
     private var presetPosSetByCode = -1
 
+    /** True while the code sets the update switch, so its listener ignores that echo. */
+    private var bindingUpdateSwitch = false
+
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(InterfaceLanguageManager.applyTo(newBase))
     }
@@ -102,7 +106,7 @@ class SetupActivity : AppCompatActivity() {
         loadCurrentPreferences()
         showMicDisclosureIfNeeded()
         checkPendingCrashReport()
-        checkForUpdates()
+        resolveUpdateConsent()
     }
 
     override fun onResume() {
@@ -141,6 +145,7 @@ class SetupActivity : AppCompatActivity() {
         switchAutoRecord = findViewById(R.id.switchAutoRecord)
         switchAddSpace = findViewById(R.id.switchAddSpace)
         switchSingleWordStripPunct = findViewById(R.id.switchSingleWordStripPunct)
+        switchUpdateCheck = findViewById(R.id.switchUpdateCheck)
         txtApiStatus = findViewById(R.id.txtApiStatus)
         txtTestResult = findViewById(R.id.txtTestResult)
         txtTestStatus = findViewById(R.id.txtTestStatus)
@@ -219,6 +224,13 @@ class SetupActivity : AppCompatActivity() {
         }
 
         btnCheckUpdate.setOnClickListener { checkForUpdates(showUpToDate = true) }
+
+        // Not gated on isPressed: that is false for TalkBack, Switch Access and a hardware
+        // keyboard, which silently dropped the change and left no way to revoke consent.
+        switchUpdateCheck.setOnCheckedChangeListener { _, isChecked ->
+            if (bindingUpdateSwitch) return@setOnCheckedChangeListener
+            scope.launch { preferenceStore.setUpdateCheckEnabled(isChecked) }
+        }
 
         btnPostProcessing.setOnClickListener {
             startActivity(Intent(this, PostProcessingActivity::class.java))
@@ -361,6 +373,7 @@ class SetupActivity : AppCompatActivity() {
             switchAutoRecord.isChecked = p.autoRecord
             switchAddSpace.isChecked = p.addTrailingSpace
             switchSingleWordStripPunct.isChecked = p.singleWordStripPunctuation
+            setUpdateSwitch(preferenceStore.isUpdateCheckEnabled())
         }
     }
 
@@ -529,6 +542,66 @@ class SetupActivity : AppCompatActivity() {
                 FaultCapture.dismissReport(this)
             }
             .setCancelable(false)
+            .show()
+    }
+
+    /**
+     * The app may not poll GitHub on its own until the user says so. On the first launch this
+     * asks once, with the two buttons carrying equal weight and the text spelling out that
+     * updates taken this way skip whatever review the install source performs. Declining is
+     * remembered; the "Check for updates" button stays available either way, and every offer
+     * repeats the disclosure before anything is downloaded.
+     */
+    private fun resolveUpdateConsent() {
+        scope.launch {
+            when {
+                preferenceStore.isUpdateCheckEnabled() -> checkForUpdates()
+                // The microphone disclosure owns the first launch. Stacking this dialog on top of
+                // it buries the one the user actually has to read; ask on a later launch instead.
+                !preferenceStore.isMicDisclosureAccepted() -> Unit
+                !preferenceStore.isUpdateConsentShown() -> showUpdateConsentDialog()
+            }
+        }
+    }
+
+    /** Write the switch without the listener mistaking it for a user action. */
+    private fun setUpdateSwitch(value: Boolean) {
+        bindingUpdateSwitch = true
+        switchUpdateCheck.isChecked = value
+        bindingUpdateSwitch = false
+    }
+
+    private fun showUpdateConsentDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.update_consent_title)
+            .setMessage(R.string.update_consent_body)
+            // Same neutral button as the microphone disclosure: the decision is only informed if
+            // the policy is reachable from the dialog that asks for it.
+            .setNeutralButton(R.string.mic_disclosure_privacy) { _, _ ->
+                try {
+                    startActivity(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://github.com/rustemar/voice-keyboard/blob/main/PRIVACY.md")
+                        )
+                    )
+                } catch (_: Exception) {}
+                showUpdateConsentDialog()
+            }
+            .setPositiveButton(R.string.update_consent_enable) { _, _ ->
+                scope.launch {
+                    preferenceStore.setUpdateCheckEnabled(true)
+                    setUpdateSwitch(true)
+                    checkForUpdates()
+                }
+            }
+            .setNegativeButton(R.string.update_consent_decline) { _, _ ->
+                scope.launch { preferenceStore.setUpdateConsentShown() }
+            }
+            .setOnCancelListener {
+                // Dismissing is a "no": nothing is enabled, and we do not nag again.
+                scope.launch { preferenceStore.setUpdateConsentShown() }
+            }
             .show()
     }
 

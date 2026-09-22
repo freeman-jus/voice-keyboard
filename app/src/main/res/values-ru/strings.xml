@@ -144,4 +144,11 @@
     <string name="crash_save_failed">Не удалось сохранить отчёт</string>
     <string name="preset_label">Готовые настройки провайдера</string>
     <string name="preset_custom">Свой</string>
+    <string name="update_check_auto">Проверять обновления на GitHub</string>
+    <string name="update_check_auto_hint">По умолчанию выключено. Обновления, полученные так, приходят напрямую от разработчика и не проходят проверку магазина приложений, из которого вы установили приложение, например F-Droid.</string>
+    <string name="update_consent_title">Проверять обновления на GitHub?</string>
+    <string name="update_consent_body">Voice Keyboard может проверять GitHub Releases на наличие новой версии и устанавливать её.\n\nОбновления, полученные так, приходят напрямую от разработчика. Они не проходят проверку магазина приложений, из которого вы установили приложение, например F-Droid, и его проверки на них не распространяются.\n\nПроверка выключена, пока вы её не включите, и это можно изменить в настройках в любой момент.</string>
+    <string name="update_consent_enable">Включить</string>
+    <string name="update_consent_decline">Оставить выключенной</string>
+    <string name="update_source_disclosure">Этот APK загружается с GitHub Releases. Он приходит напрямую от разработчика и не проходит проверку магазина приложений, из которого вы установили приложение.</string>
 </resources>

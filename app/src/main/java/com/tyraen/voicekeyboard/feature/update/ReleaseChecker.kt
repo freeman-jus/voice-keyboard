@@ -129,6 +129,10 @@ class ReleaseChecker(private val http: OkHttpClient) {
 
         val message = buildString {
             append(context.getString(R.string.update_new_version, latest.version))
+            // Shown on every offer, manual check included: the user has to know this APK comes
+            // straight from the developer and carries none of the store's checks.
+            append("\n\n")
+            append(context.getString(R.string.update_source_disclosure))
             for (release in releases) {
                 append("\n\n--- v${release.version} ---\n")
                 if (release.changeNotes.isNotBlank()) {

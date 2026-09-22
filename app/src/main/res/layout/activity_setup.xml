@@ -475,6 +475,24 @@
             android:layout_marginBottom="16dp" />
 
         <!-- Update section -->
+        <Switch
+            android:id="@+id/switchUpdateCheck"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/update_check_auto"
+            android:textColor="@color/key_text"
+            android:thumbTint="@color/switch_thumb_color"
+            android:trackTint="@color/switch_track_color"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/update_check_auto_hint"
+            android:textColor="@color/status_text"
+            android:textSize="11sp"
+            android:layout_marginBottom="12dp" />
+
         <Button
             android:id="@+id/btnCheckUpdate"
             android:layout_width="match_parent"

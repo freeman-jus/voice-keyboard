@@ -144,4 +144,11 @@
     <string name="crash_save_failed">Nie udało się zapisać raportu</string>
     <string name="preset_label">Gotowe ustawienia dostawcy</string>
     <string name="preset_custom">Własne</string>
+    <string name="update_check_auto">Sprawdzaj aktualizacje na GitHubie</string>
+    <string name="update_check_auto_hint">Domyślnie wyłączone. Aktualizacje pobrane w ten sposób pochodzą bezpośrednio od dewelopera i nie są sprawdzane przez sklep, z którego zainstalowano aplikację, na przykład F-Droid.</string>
+    <string name="update_consent_title">Sprawdzać aktualizacje na GitHubie?</string>
+    <string name="update_consent_body">Voice Keyboard może sprawdzać GitHub Releases pod kątem nowszej wersji i instalować ją za Ciebie.\n\nAktualizacje pobrane w ten sposób pochodzą bezpośrednio od dewelopera. Nie są sprawdzane przez sklep, z którego zainstalowano aplikację, taki jak F-Droid, a jego kontrole ich nie obejmują.\n\nSprawdzanie pozostaje wyłączone, dopóki go nie włączysz, i możesz to zmienić w ustawieniach w dowolnej chwili.</string>
+    <string name="update_consent_enable">Włącz</string>
+    <string name="update_consent_decline">Pozostaw wyłączone</string>
+    <string name="update_source_disclosure">Ten plik APK jest pobierany z GitHub Releases. Pochodzi bezpośrednio od dewelopera i nie jest sprawdzany przez sklep, z którego zainstalowano aplikację.</string>
 </resources>

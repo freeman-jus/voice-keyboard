@@ -144,4 +144,11 @@
     <string name="crash_save_failed">보고서를 저장할 수 없습니다</string>
     <string name="preset_label">제공업체 프리셋</string>
     <string name="preset_custom">사용자 지정</string>
+    <string name="update_check_auto">GitHub에서 업데이트 확인</string>
+    <string name="update_check_auto_hint">기본적으로 꺼져 있습니다. 이 방식으로 받은 업데이트는 개발자에게서 바로 오며, 앱을 설치한 앱 스토어(예: F-Droid)의 검토를 거치지 않습니다.</string>
+    <string name="update_consent_title">GitHub에서 업데이트를 확인할까요?</string>
+    <string name="update_consent_body">Voice Keyboard가 GitHub Releases에서 새 버전을 확인하고 설치해 드릴 수 있습니다.\n\n이 방식으로 받은 업데이트는 개발자에게서 바로 옵니다. 앱을 설치한 앱 스토어(예: F-Droid)의 검토를 거치지 않으며, 그 검사도 적용되지 않습니다.\n\n켜기 전까지 확인은 꺼져 있고, 설정에서 언제든지 변경할 수 있습니다.</string>
+    <string name="update_consent_enable">켜기</string>
+    <string name="update_consent_decline">끈 상태로 두기</string>
+    <string name="update_source_disclosure">이 APK는 GitHub Releases에서 다운로드됩니다. 개발자에게서 바로 오며, 설치한 스토어의 검토를 거치지 않습니다.</string>
 </resources>

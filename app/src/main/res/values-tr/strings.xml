@@ -144,4 +144,11 @@
     <string name="crash_save_failed">Rapor kaydedilemedi</string>
     <string name="preset_label">Sağlayıcı ön ayarı</string>
     <string name="preset_custom">Özel</string>
+    <string name="update_check_auto">Güncellemeleri GitHub\'da kontrol et</string>
+    <string name="update_check_auto_hint">Varsayılan olarak kapalı. Bu yolla alınan güncellemeler doğrudan geliştiriciden gelir ve uygulamayı kurduğunuz uygulama mağazası, örneğin F-Droid, tarafından incelenmez.</string>
+    <string name="update_consent_title">Güncellemeler GitHub\'da kontrol edilsin mi?</string>
+    <string name="update_consent_body">Voice Keyboard, daha yeni bir sürüm için GitHub Releases\'i kontrol edip sizin yerinize kurabilir.\n\nBu yolla alınan güncellemeler doğrudan geliştiriciden gelir. Uygulamayı kurduğunuz uygulama mağazası (örneğin F-Droid) tarafından incelenmez ve onun denetimleri bunlar için geçerli değildir.\n\nSiz açana kadar kontrol kapalı kalır ve bunu istediğiniz zaman ayarlardan değiştirebilirsiniz.</string>
+    <string name="update_consent_enable">Aç</string>
+    <string name="update_consent_decline">Kapalı bırak</string>
+    <string name="update_source_disclosure">Bu APK, GitHub Releases\'ten indirilir. Doğrudan geliştiriciden gelir ve kurulum yaptığınız mağaza tarafından incelenmez.</string>
 </resources>

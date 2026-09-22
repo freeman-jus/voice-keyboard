@@ -49,6 +49,13 @@
     <string name="update_check">Check for updates</string>
     <string name="update_no_updates">You are on the latest version</string>
     <string name="update_check_failed">Could not check for updates. Check your internet connection.</string>
+    <string name="update_check_auto">Check GitHub for updates</string>
+    <string name="update_check_auto_hint">Off by default. Updates fetched this way come straight from the developer and are not reviewed by the app store you installed from, such as F-Droid.</string>
+    <string name="update_consent_title">Check GitHub for updates?</string>
+    <string name="update_consent_body">Voice Keyboard can check GitHub Releases for a newer version and install it for you.\n\nUpdates fetched this way come straight from the developer. They are not reviewed by the app store you installed the app from, such as F-Droid, and its checks do not apply to them.\n\nThe check stays off until you turn it on, and you can change it any time in settings.</string>
+    <string name="update_consent_enable">Turn on</string>
+    <string name="update_consent_decline">Leave off</string>
+    <string name="update_source_disclosure">This APK is downloaded from GitHub Releases. It comes straight from the developer and is not reviewed by the app store you installed from.</string>
     <string name="settings_get_api_key">Free Groq key → console.groq.com</string>
     <string name="settings_get_api_key_alt">Free Mistral key → console.mistral.ai</string>
     <string name="settings_provider_hint">Any OpenAI-compatible Whisper key works. Groq works out of the box; for Mistral, set the endpoint to api.mistral.ai/v1/audio/transcriptions and the model to voxtral-mini-latest.</string>
