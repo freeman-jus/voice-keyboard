@@ -233,10 +233,8 @@ jobs:
           : > summary/patches.txt
           for p in builder/patches/*.patch; do
             NAME=$(basename "$p")
-            LINE=$(grep -m1 '^What:' "$p" || true)
-            if [ -z "$LINE" ]; then
-              LINE=$(grep -m1 -v '^[[:space:]]*$' "$p" || true)
-            fi
+            # Each patch header opens with a one-line title ("Patch 00N: ..."); use it.
+            LINE=$(grep -m1 -v '^[[:space:]]*$' "$p" || true)
             echo "$NAME: $LINE" >> summary/patches.txt
           done
           cat summary/patches.txt
@@ -291,7 +289,8 @@ jobs:
           set -euo pipefail
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           KS="$RUNNER_TEMP/release.p12"
-          printf '%s' "$JF_KEYSTORE_BASE64" | base64 -d > "$KS"
+          # tr: tolerate CR/LF/spaces a Windows shell may have added when the secret was set
+          printf '%s' "$JF_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$KS"
           mkdir -p out
           "$BT/zipalign" -p -f 4 summary/unsigned.apk out/aligned.apk
           "$BT/apksigner" sign \
