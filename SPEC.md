@@ -192,7 +192,7 @@ Use JDK 17 (Temurin) and `runs-on: ubuntu-24.04`. No signing environment variabl
 |---|---|
 | An upstream refactor breaks a patch | The build fails and nothing is published; the phone keeps the last build. Regenerate the patch against the new tag. |
 | The in-app update checker installs rustemar's **official** APK | Keep "check for updates" off in the JF build. With a different package, an accidental "update" installs or updates the official app, not this one. |
-| Upstream's `build.yml` runs in the fork | Disabled in Phase 2; it could never see our `JF_*` secrets anyway. |
+| Upstream's `build.yml` runs in the fork | It lives only on the fork's `main`, which is never pushed or synced, so it isn't registered (verified 2026-09-25). If it's ever registered, disable it. It could never see our `JF_*` secrets anyway. |
 | Scheduled workflow auto-disabled (public repo) | R13 keepalive. `workflow_dispatch` always works. |
 | Keystore lost | Updates become impossible; reinstall and re-enter settings. Keep an offline backup of the keystore and password. |
 | Upstream adds a network feature | It shows in the change summary before you update. |

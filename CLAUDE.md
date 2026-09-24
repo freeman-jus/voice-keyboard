@@ -18,7 +18,8 @@ Branch `jf` of the public fork `freeman-jus/voice-keyboard`: a **builder** that 
 6. **Keep the build/sign separation** (SPEC R8, N6). Only `sign` may reference `secrets.` or have `contents: write`.
 7. **Never delete releases or tags.** Publish is draft → upload `--clobber` → publish.
 8. **Pin every `uses:` to a full commit SHA**, version in a trailing comment.
-9. **Ask Justin before:** pushing to `jf`, creating or publishing releases, changing secrets or variables, changing the schedule, adding a patch, or opening anything on rustemar's repo (issues, PRs).
+9. **Never push to or "Sync fork" the fork's `main`.** It holds upstream's own `build.yml`, which isn't registered here; syncing would register and run it. If it ever shows up under Actions, disable it.
+10. **Ask Justin before:** pushing to `jf`, creating or publishing releases, changing secrets or variables, changing the schedule, adding a patch, or opening anything on rustemar's repo (issues, PRs).
 
 ## Regenerating a patch after upstream changes
 
