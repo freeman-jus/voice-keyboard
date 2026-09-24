@@ -17,3 +17,6 @@ summary/
 *.aab
 .gradle/
 build/
+
+# Claude Code agent worktrees
+.claude/
