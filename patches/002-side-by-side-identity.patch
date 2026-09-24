@@ -1,0 +1,39 @@
+Patch 002: side-by-side identity
+
+What: gives this build its own package id and name so it installs alongside the official app.
+In app/build.gradle.kts defaultConfig, adds applicationIdSuffix = ".jf" (package
+com.tyraen.voicekeyboard.jf; the FileProvider authority follows via ${applicationId}). In
+res/values/strings.xml, sets app_name to "Voice Keyboard (JF)". Namespace, class names and
+method.xml are unchanged.
+
+Why: SPEC.md R7 (and N5: the app name carries "(JF)").
+
+When to delete: never, while this fork is installed alongside the official app.
+
+Base: rustemar/voice-keyboard v1.9.1 (02ff1a4bfa626744dfed42b55741f5c55e80060a) with patch 001
+applied. Generated with git diff; apply with git apply after 001.
+
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index ed6e07d..7c043ef 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -9,6 +9,7 @@ android {
+ 
+     defaultConfig {
+         applicationId = "com.tyraen.voicekeyboard"
++        applicationIdSuffix = ".jf"
+         minSdk = 24
+         targetSdk = 34
+         versionCode = 52
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 837007a..95dddf7 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">Voice Keyboard</string>
++    <string name="app_name">Voice Keyboard (JF)</string>
+     <string name="status_idle">Tap mic to record</string>
+     <string name="status_recording">Recording\u2026</string>
+     <string name="status_transcribing">Transcribing\u2026</string>

@@ -1,0 +1,297 @@
+Patch 001: return to previous keyboard after inserting
+
+What: adds an opt-in setting, "Return to previous keyboard after inserting" (default off),
+next to "Auto-start recording" on the settings screen. When it is on and a dictation has just
+been typed into the field (not the clipboard fallback), with nothing recording, nothing left in
+the queue and no failed or parked recording waiting for resend, the keyboard hands control back
+to the keyboard that opened it: switchToPreviousInputMethod() on API 28+, requestHideSelf(0) if
+that fails or on older Android. Errors, parked recordings and cancel never trigger it. With the
+setting off the app behaves exactly as upstream. The decision is a pure function
+(ReturnToPreviousKeyboard) with a JVM unit test.
+
+Why: SPEC.md R6. HeliBoard's mic key opens this keyboard for voice input; without this the user
+has to switch back by hand after every dictation.
+
+When to delete: once upstream ships an equivalent setting.
+
+Base: rustemar/voice-keyboard v1.9.1 (02ff1a4bfa626744dfed42b55741f5c55e80060a).
+Generated with git diff from a clean checkout of that tag; apply with git apply.
+
+diff --git a/app/src/main/java/com/tyraen/voicekeyboard/core/config/PreferenceStore.kt b/app/src/main/java/com/tyraen/voicekeyboard/core/config/PreferenceStore.kt
+index 3790975..9dbd8aa 100644
+--- a/app/src/main/java/com/tyraen/voicekeyboard/core/config/PreferenceStore.kt
++++ b/app/src/main/java/com/tyraen/voicekeyboard/core/config/PreferenceStore.kt
+@@ -27,6 +27,7 @@ class PreferenceStore(private val context: Context) {
+         val ADD_TRAILING_SPACE = booleanPreferencesKey("add_trailing_space")
+         val PROMPT = stringPreferencesKey("prompt")
+         val SINGLE_WORD_STRIP_PUNCT = booleanPreferencesKey("single_word_strip_punct")
++        val RETURN_TO_PREVIOUS_KEYBOARD = booleanPreferencesKey("return_to_previous_keyboard")
+         val VOCABULARY = stringPreferencesKey("vocabulary")
+ 
+         // Post-processing config
+@@ -81,7 +82,8 @@ class PreferenceStore(private val context: Context) {
+             autoRecord = prefs[Keys.AUTO_RECORD] ?: false,
+             addTrailingSpace = prefs[Keys.ADD_TRAILING_SPACE] ?: true,
+             prompt = prefs[Keys.PROMPT] ?: defaultPrompt,
+-            singleWordStripPunctuation = prefs[Keys.SINGLE_WORD_STRIP_PUNCT] ?: false
++            singleWordStripPunctuation = prefs[Keys.SINGLE_WORD_STRIP_PUNCT] ?: false,
++            returnToPreviousKeyboard = prefs[Keys.RETURN_TO_PREVIOUS_KEYBOARD] ?: false
+         )
+     }
+ 
+@@ -96,6 +98,7 @@ class PreferenceStore(private val context: Context) {
+             data[Keys.ADD_TRAILING_SPACE] = prefs.addTrailingSpace
+             data[Keys.PROMPT] = prefs.prompt
+             data[Keys.SINGLE_WORD_STRIP_PUNCT] = prefs.singleWordStripPunctuation
++            data[Keys.RETURN_TO_PREVIOUS_KEYBOARD] = prefs.returnToPreviousKeyboard
+         }
+     }
+ 
+diff --git a/app/src/main/java/com/tyraen/voicekeyboard/core/config/UserPreferences.kt b/app/src/main/java/com/tyraen/voicekeyboard/core/config/UserPreferences.kt
+index 9eef87c..88edab5 100644
+--- a/app/src/main/java/com/tyraen/voicekeyboard/core/config/UserPreferences.kt
++++ b/app/src/main/java/com/tyraen/voicekeyboard/core/config/UserPreferences.kt
+@@ -13,7 +13,9 @@ data class UserPreferences(
+     val autoRecord: Boolean,
+     val addTrailingSpace: Boolean,
+     val prompt: String,
+-    val singleWordStripPunctuation: Boolean = false
++    val singleWordStripPunctuation: Boolean = false,
++    /** Hand back to the keyboard that opened this one once a dictation has been typed. */
++    val returnToPreviousKeyboard: Boolean = false
+ ) {
+     val languageCodes: List<String> get() = TranscriptionLocale.parseCodes(languages)
+ 
+diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt
+index dcd8cb7..c390743 100644
+--- a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt
++++ b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt
+@@ -5,6 +5,7 @@ import android.content.ClipboardManager
+ import android.content.Context
+ import android.content.Intent
+ import android.inputmethodservice.InputMethodService
++import android.os.Build
+ import android.view.MotionEvent
+ import android.view.View
+ import android.view.inputmethod.InputMethodManager
+@@ -65,9 +66,11 @@ class DictationInputMethod : InputMethodService() {
+             onTextReady = { text, addTrailingSpace ->
+                 // A visible panel can still lack an InputConnection (some apps drop it mid-edit);
+                 // the clipboard is the fallback there too, never a silent loss.
+-                if (!keyboardVisible || !keystrokes.insertDictation(text, addTrailingSpace)) {
++                val inserted = keyboardVisible && keystrokes.insertDictation(text, addTrailingSpace)
++                if (!inserted) {
+                     copyToClipboard(if (addTrailingSpace) "$text " else text)
+                 }
++                returnToPreviousKeyboardIfDone(inserted)
+             },
+             onPhaseChanged = { phase -> panel.transitionTo(phase) },
+             onAmplitude = { level -> panel.animator.adjustForAmplitude(level) },
+@@ -130,6 +133,24 @@ class DictationInputMethod : InputMethodService() {
+         clipboard.setPrimaryClip(ClipData.newPlainText("Voice transcription", text))
+     }
+ 
++    /**
++     * With the setting on, hands the screen back to the keyboard that opened this one (another
++     * keyboard's mic key, say) once the last queued dictation has been typed. Main thread only.
++     */
++    private fun returnToPreviousKeyboardIfDone(inserted: Boolean) {
++        val handBack = ReturnToPreviousKeyboard.shouldReturnToPreviousKeyboard(
++            enabled = orchestrator.isReturnToPreviousKeyboardEnabled(),
++            inserted = inserted,
++            capturing = orchestrator.currentPhase is InputPhase.Capturing,
++            // Decided synchronously inside the queue's delivery, where pendingCount still counts this recording.
++            pendingCount = ServiceLocator.transcriptionQueue.pendingCount - 1,
++            failedCount = ServiceLocator.parkedRecordingStore.count.value
++        )
++        if (!handBack) return
++        val switched = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && switchToPreviousInputMethod()
++        if (!switched) requestHideSelf(0)
++    }
++
+     override fun onDestroy() {
+         super.onDestroy()
+         clipboardListener?.let {
+diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/InputOrchestrator.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/InputOrchestrator.kt
+index 096427e..a2e8032 100644
+--- a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/InputOrchestrator.kt
++++ b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/InputOrchestrator.kt
+@@ -147,6 +147,8 @@ class InputOrchestrator(
+ 
+     fun isPostProcessingEnabled(): Boolean = ppPreferences?.enabled == true
+ 
++    fun isReturnToPreviousKeyboardEnabled(): Boolean = preferences?.returnToPreviousKeyboard == true
++
+     /** Every dictation language the user configured, in the order they listed them. */
+     fun getLanguageCodes(): List<String> = preferences?.languageCodes ?: emptyList()
+ 
+diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboard.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboard.kt
+new file mode 100644
+index 0000000..585cec4
+--- /dev/null
++++ b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboard.kt
+@@ -0,0 +1,22 @@
++package com.tyraen.voicekeyboard.feature.ime
++
++/**
++ * Decides when the keyboard hands the screen back to the one that opened it, typically another
++ * keyboard's mic key. Only once a dictation has actually been typed into the field and nothing is
++ * left for this panel to show: no recording in progress, nothing still queued, and no failed
++ * recording waiting for resend, so the queue badge and the resend button are never hidden.
++ */
++object ReturnToPreviousKeyboard {
++
++    /**
++     * [inserted] is false when the text went to the clipboard instead of the field.
++     * [pendingCount] must not count the recording that was just delivered.
++     */
++    fun shouldReturnToPreviousKeyboard(
++        enabled: Boolean,
++        inserted: Boolean,
++        capturing: Boolean,
++        pendingCount: Int,
++        failedCount: Int
++    ): Boolean = enabled && inserted && !capturing && pendingCount == 0 && failedCount == 0
++}
+diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/setup/SetupActivity.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/setup/SetupActivity.kt
+index ccef529..ec6b262 100644
+--- a/app/src/main/java/com/tyraen/voicekeyboard/feature/setup/SetupActivity.kt
++++ b/app/src/main/java/com/tyraen/voicekeyboard/feature/setup/SetupActivity.kt
+@@ -51,6 +51,7 @@ class SetupActivity : AppCompatActivity() {
+     private lateinit var editLanguage: EditText
+     private lateinit var editPrompt: EditText
+     private lateinit var switchAutoRecord: Switch
++    private lateinit var switchReturnToPreviousKeyboard: Switch
+     private lateinit var switchAddSpace: Switch
+     private lateinit var switchSingleWordStripPunct: Switch
+     private lateinit var switchUpdateCheck: Switch
+@@ -143,6 +144,7 @@ class SetupActivity : AppCompatActivity() {
+         editLanguage = findViewById(R.id.editLanguage)
+         editPrompt = findViewById(R.id.editPrompt)
+         switchAutoRecord = findViewById(R.id.switchAutoRecord)
++        switchReturnToPreviousKeyboard = findViewById(R.id.switchReturnToPreviousKeyboard)
+         switchAddSpace = findViewById(R.id.switchAddSpace)
+         switchSingleWordStripPunct = findViewById(R.id.switchSingleWordStripPunct)
+         switchUpdateCheck = findViewById(R.id.switchUpdateCheck)
+@@ -371,6 +373,7 @@ class SetupActivity : AppCompatActivity() {
+             activeLanguage = p.effectiveLanguage
+             editPrompt.setText(p.prompt)
+             switchAutoRecord.isChecked = p.autoRecord
++            switchReturnToPreviousKeyboard.isChecked = p.returnToPreviousKeyboard
+             switchAddSpace.isChecked = p.addTrailingSpace
+             switchSingleWordStripPunct.isChecked = p.singleWordStripPunctuation
+             setUpdateSwitch(preferenceStore.isUpdateCheckEnabled())
+@@ -491,7 +494,8 @@ class SetupActivity : AppCompatActivity() {
+         autoRecord = switchAutoRecord.isChecked,
+         addTrailingSpace = switchAddSpace.isChecked,
+         prompt = editPrompt.text.toString().trim(),
+-        singleWordStripPunctuation = switchSingleWordStripPunct.isChecked
++        singleWordStripPunctuation = switchSingleWordStripPunct.isChecked,
++        returnToPreviousKeyboard = switchReturnToPreviousKeyboard.isChecked
+     )
+ 
+     private fun showApiStatus(message: String, color: Int) {
+diff --git a/app/src/main/res/layout/activity_setup.xml b/app/src/main/res/layout/activity_setup.xml
+index 1b30c73..ed268c4 100644
+--- a/app/src/main/res/layout/activity_setup.xml
++++ b/app/src/main/res/layout/activity_setup.xml
+@@ -257,6 +257,17 @@
+             android:trackTint="@color/switch_track_color"
+             android:layout_marginBottom="12dp" />
+ 
++        <!-- Return to the previous keyboard after inserting -->
++        <Switch
++            android:id="@+id/switchReturnToPreviousKeyboard"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/settings_return_to_previous_keyboard"
++            android:textColor="@color/key_text"
++            android:thumbTint="@color/switch_thumb_color"
++            android:trackTint="@color/switch_track_color"
++            android:layout_marginBottom="12dp" />
++
+         <!-- Add trailing space -->
+         <Switch
+             android:id="@+id/switchAddSpace"
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index f8e5692..837007a 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -12,6 +12,7 @@
+     <string name="settings_language_hint">Comma-separated codes, for example: en, ru. Add more than one and a language key appears on the keyboard. Leave empty to detect automatically.</string>
+     <string name="settings_endpoint">API Endpoint</string>
+     <string name="settings_auto_record">Auto-start recording</string>
++    <string name="settings_return_to_previous_keyboard">Return to previous keyboard after inserting</string>
+     <string name="settings_add_space">Add trailing space</string>
+     <string name="settings_apply">Apply</string>
+     <string name="settings_enable_instructions">To enable this keyboard:\n\n1. Go to Settings → System → Languages &amp; input → On-screen keyboard\n2. Enable \"Voice Keyboard\"\n3. Switch to it in any text field</string>
+diff --git a/app/src/test/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboardTest.kt b/app/src/test/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboardTest.kt
+new file mode 100644
+index 0000000..a62cbd4
+--- /dev/null
++++ b/app/src/test/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboardTest.kt
+@@ -0,0 +1,64 @@
++package com.tyraen.voicekeyboard.feature.ime
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ReturnToPreviousKeyboardTest {
++
++    private fun decide(
++        enabled: Boolean = true,
++        inserted: Boolean = true,
++        capturing: Boolean = false,
++        pendingCount: Int = 0,
++        failedCount: Int = 0
++    ) = ReturnToPreviousKeyboard.shouldReturnToPreviousKeyboard(
++        enabled, inserted, capturing, pendingCount, failedCount
++    )
++
++    @Test fun `returns once the last dictation is typed and nothing else is left`() {
++        assertTrue(decide())
++    }
++
++    @Test fun `stays when the setting is off`() {
++        assertFalse(decide(enabled = false))
++    }
++
++    @Test fun `stays when the text went to the clipboard instead of the field`() {
++        assertFalse(decide(inserted = false))
++    }
++
++    @Test fun `stays while a new recording is in progress`() {
++        assertFalse(decide(capturing = true))
++    }
++
++    @Test fun `stays until the last queued recording is typed`() {
++        assertFalse(decide(pendingCount = 1))
++        assertFalse(decide(pendingCount = 3))
++    }
++
++    @Test fun `stays while a failed recording waits for resend`() {
++        assertFalse(decide(failedCount = 1))
++        assertFalse(decide(failedCount = 2))
++    }
++
++    @Test fun `across the whole truth table only the one clear combination returns`() {
++        val flags = listOf(false, true)
++        val returning = mutableListOf<List<Any>>()
++        for (enabled in flags) {
++            for (inserted in flags) {
++                for (capturing in flags) {
++                    for (pending in 0..2) {
++                        for (failed in 0..2) {
++                            if (decide(enabled, inserted, capturing, pending, failed)) {
++                                returning.add(listOf(enabled, inserted, capturing, pending, failed))
++                            }
++                        }
++                    }
++                }
++            }
++        }
++        assertEquals(listOf(listOf(true, true, false, 0, 0)), returning)
++    }
++}
