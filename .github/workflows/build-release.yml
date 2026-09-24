@@ -1,0 +1,378 @@
+# Requirement IDs (R*, N*) refer to SPEC.md.
+#
+# Security model (SPEC §3, R8, N6):
+#   job "check"  contents:read, actions:write (keepalive only, R13). No upstream code, no secrets.
+#   job "build"  runs UPSTREAM CODE (patched). contents:read only, no secrets.*, no persisted git
+#                credentials on any checkout. Produces an unsigned APK + change-summary inputs.
+#   job "sign"   runs NO upstream code. It alone sees the JF_* keystore secrets and has
+#                contents:write. Only the build artifact crosses the boundary, and its SHA-256
+#                is re-verified here before anything is signed.
+
+name: Build Voice Keyboard (JF)
+
+on:
+  schedule:
+    - cron: "0 19 * * *"   # daily (R1)
+  workflow_dispatch:        # (R2)
+    inputs:
+      tag:
+        description: "Upstream tag to build, e.g. v1.9.1 (blank = newest)"
+        required: false
+        default: ""
+        type: string
+      publish:
+        description: "Sign and publish a release (false = check + build dry run only)"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: build-release
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: rustemar/voice-keyboard
+
+jobs:
+  # ---------------------------------------------------------------- check
+  check:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write   # R13 keepalive only; no other job has this
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      sha: ${{ steps.resolve.outputs.sha }}
+      jf_tag: ${{ steps.resolve.outputs.jf_tag }}
+      version_name: ${{ steps.resolve.outputs.version_name }}
+      prev: ${{ steps.resolve.outputs.prev }}
+      build: ${{ steps.resolve.outputs.build }}
+    steps:
+      - name: Resolve upstream tag and build decision (R1, R2, R4)
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${INPUT_TAG:-}" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG=$(gh api "repos/$UPSTREAM_REPO/releases?per_page=30" --jq \
+              '[.[] | select(.draft==false and .prerelease==false) | .tag_name
+                | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | first // empty')
+          fi
+          [ -n "$TAG" ] || { echo "::error::No upstream release found"; exit 1; }
+
+          SHA=$(gh api "repos/$UPSTREAM_REPO/commits/$TAG" --jq .sha)
+          JF_TAG="${TAG}-jf.${{ github.run_number }}"
+          VERSION_NAME="${JF_TAG#v}"
+
+          PREV=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 1 \
+                   --json tagName --jq '.[0].tagName // empty' || true)
+
+          # build=false only on an undispatched schedule when a vX.Y.Z-jf.* release already
+          # exists for this tag; a manual dispatch (with or without an explicit tag) always builds.
+          BUILD=true
+          if [ -z "${INPUT_TAG:-}" ]; then
+            EXISTS=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+                       --json tagName --jq '.[].tagName' | grep -c "^${TAG}-jf\." || true)
+            if [ "${EXISTS:-0}" -gt 0 ]; then
+              BUILD=false
+            fi
+          fi
+
+          {
+            echo "tag=$TAG"
+            echo "sha=$SHA"
+            echo "jf_tag=$JF_TAG"
+            echo "version_name=$VERSION_NAME"
+            echo "prev=$PREV"
+            echo "build=$BUILD"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$BUILD" = "false" ]; then
+            echo "Already have a release for $TAG (${TAG}-jf.*); nothing to do."
+          fi
+
+      - name: Keep scheduled workflow enabled (R13)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/build-release.yml/enable"
+
+  # ---------------------------------------------------------------- build (runs upstream code; no secrets)
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      apk_sha256: ${{ steps.pack.outputs.apk_sha256 }}
+    env:
+      TAG: ${{ needs.check.outputs.tag }}
+      SHA: ${{ needs.check.outputs.sha }}
+      JF_TAG: ${{ needs.check.outputs.jf_tag }}
+      VERSION_NAME: ${{ needs.check.outputs.version_name }}
+    steps:
+      - name: Check out builder repo (patches only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: builder
+          persist-credentials: false
+
+      - name: Check out upstream at resolved commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ env.SHA }}
+          path: upstream
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-provider: basic   # avoid the proprietary/commercial gradle-actions cache
+
+      - name: Apply patches (R3)
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for p in ../builder/patches/*.patch; do
+            echo "Applying $p"
+            git apply --verbose "$p"
+          done
+
+      - name: Stamp version (R4)
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          FILE="app/build.gradle.kts"
+          MATCHES=$(grep -cE 'versionName = "[0-9]+\.[0-9]+\.[0-9]+"' "$FILE")
+          if [ "$MATCHES" -ne 1 ]; then
+            echo "::error::Expected exactly one versionName literal in $FILE, found $MATCHES"
+            exit 1
+          fi
+          sed -i -E 's/versionName = "[0-9]+\.[0-9]+\.[0-9]+"/versionName = "'"$VERSION_NAME"'"/' "$FILE"
+          CHANGED=$(grep -c "versionName = \"$VERSION_NAME\"" "$FILE")
+          if [ "$CHANGED" -ne 1 ]; then
+            echo "::error::versionName substitution did not happen exactly once (found $CHANGED)"
+            exit 1
+          fi
+          echo "Stamped versionName -> $VERSION_NAME (versionCode left unchanged)"
+
+      - name: Run unit tests and build unsigned release (R5)
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          ./gradlew testDebugUnitTest --no-daemon
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Collect unsigned APK
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          mkdir -p ../summary
+          APK="app/build/outputs/apk/release/VoiceKeyboard.apk"
+          if [ ! -f "$APK" ]; then
+            echo "::error::Unsigned APK not found at $APK"
+            ls -R app/build/outputs/apk || true
+            exit 1
+          fi
+          cp "$APK" ../summary/unsigned.apk
+
+      - name: Guard package id and versionName (R4, R7)
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          BADGING=$("$BT/aapt2" dump badging ../summary/unsigned.apk)
+          PKG=$(echo "$BADGING" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          VN=$(echo "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+          [ "$PKG" = "com.tyraen.voicekeyboard.jf" ] || {
+            echo "::error::Package id is '$PKG', expected com.tyraen.voicekeyboard.jf"; exit 1; }
+          [ "$VN" = "$VERSION_NAME" ] || {
+            echo "::error::versionName is '$VN', expected $VERSION_NAME"; exit 1; }
+          echo "Guard passed: $PKG $VN"
+
+      - name: Collect permissions and dependencies (R10)
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          # permissions from the FINISHED APK, i.e. after manifest merging
+          "$BT/aapt2" dump permissions ../summary/unsigned.apk | sort -u > ../summary/permissions.txt
+          # resolved runtime dependency coordinates
+          ./gradlew -q :app:dependencies --configuration releaseRuntimeClasspath --no-daemon \
+            | grep -oE '[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.+-]+' | sort -u > ../summary/dependencies.txt
+
+      - name: Collect indicative domain grep (R10)
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          # supplementary: hard-coded domains in the WORKING TREE (patches included), indicative only
+          grep -rhoE 'https?://[A-Za-z0-9.-]+' --include='*.kt' --include='*.java' --include='*.xml' --include='*.json' \
+            --exclude-dir=test --exclude-dir=androidTest --exclude-dir=build . \
+            | sed -E 's#https?://##' | sort -u > ../summary/domains.txt || true
+
+      - name: Collect LICENSE and applied-patch summary (N5, R10)
+        run: |
+          set -euo pipefail
+          cp upstream/LICENSE summary/LICENSE
+          shopt -s nullglob
+          : > summary/patches.txt
+          for p in builder/patches/*.patch; do
+            NAME=$(basename "$p")
+            LINE=$(grep -m1 '^What:' "$p" || true)
+            if [ -z "$LINE" ]; then
+              LINE=$(grep -m1 -v '^[[:space:]]*$' "$p" || true)
+            fi
+            echo "$NAME: $LINE" >> summary/patches.txt
+          done
+          cat summary/patches.txt
+
+      - name: Record artifact digest
+        id: pack
+        run: |
+          set -euo pipefail
+          SHA256=$(sha256sum summary/unsigned.apk | awk '{print $1}')
+          echo "apk_sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "unsigned APK sha256: $SHA256"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-${{ env.JF_TAG }}
+          path: summary/
+          retention-days: 3
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------- sign + publish (no upstream code)
+  sign:
+    needs: [check, build]
+    if: needs.check.outputs.build == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.check.outputs.tag }}
+      JF_TAG: ${{ needs.check.outputs.jf_tag }}
+      PREV: ${{ needs.check.outputs.prev }}
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: unsigned-${{ env.JF_TAG }}
+          path: summary
+
+      - name: Verify artifact digest matches what the build job produced
+        env:
+          EXPECTED_SHA: ${{ needs.build.outputs.apk_sha256 }}
+        run: |
+          set -euo pipefail
+          ACTUAL=$(sha256sum summary/unsigned.apk | awk '{print $1}')
+          [ "$ACTUAL" = "$EXPECTED_SHA" ] || { echo "::error::Artifact digest mismatch"; exit 1; }
+
+      - name: Sign (R8)
+        env:
+          JF_KEYSTORE_BASE64: ${{ secrets.JF_KEYSTORE_BASE64 }}
+          JF_KEYSTORE_PASSWORD: ${{ secrets.JF_KEYSTORE_PASSWORD }}
+          JF_KEY_ALIAS: ${{ secrets.JF_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          KS="$RUNNER_TEMP/release.p12"
+          printf '%s' "$JF_KEYSTORE_BASE64" | base64 -d > "$KS"
+          mkdir -p out
+          "$BT/zipalign" -p -f 4 summary/unsigned.apk out/aligned.apk
+          "$BT/apksigner" sign \
+            --ks "$KS" --ks-type PKCS12 \
+            --ks-pass env:JF_KEYSTORE_PASSWORD --key-pass env:JF_KEYSTORE_PASSWORD \
+            --ks-key-alias "$JF_KEY_ALIAS" \
+            --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true \
+            --out "out/VoiceKeyboard-JF-$JF_TAG.apk" out/aligned.apk
+          shred -u "$KS" 2>/dev/null || rm -f "$KS"
+          rm -f out/aligned.apk
+
+      - name: Fingerprint guard (R9)
+        env:
+          EXPECTED_CERT_SHA256: ${{ vars.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          [ -n "$EXPECTED_CERT_SHA256" ] || { echo "::error::EXPECTED_CERT_SHA256 repo variable not set"; exit 1; }
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          NORM_EXPECTED=$(echo "$EXPECTED_CERT_SHA256" | tr -d ': ' | tr 'A-F' 'a-f')
+          ACTUAL=$("$BT/apksigner" verify --print-certs "out/VoiceKeyboard-JF-$JF_TAG.apk" \
+                    | grep -m1 'certificate SHA-256 digest' | awk '{print $NF}' | tr -d ': ' | tr 'A-F' 'a-f')
+          [ "$ACTUAL" = "$NORM_EXPECTED" ] || {
+            echo "::error::Signer fingerprint mismatch: got $ACTUAL, expected $NORM_EXPECTED"; exit 1; }
+          echo "CERT=$ACTUAL" >> "$GITHUB_ENV"
+
+      - name: Change summary and attribution (R10, N5)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p prevrel
+          HAVE_PREV=false
+          if [ -n "$PREV" ] && [ "$PREV" != "$JF_TAG" ]; then
+            gh release download "$PREV" --repo "$GITHUB_REPOSITORY" --dir prevrel \
+              -p permissions.txt -p dependencies.txt -p domains.txt && HAVE_PREV=true || true
+          fi
+          section() { # $1 label, $2 file
+            echo "**$1 added:**";   comm -13 "prevrel/$2" "summary/$2" | sed 's/^/- /'; echo
+            echo "**$1 removed:**"; comm -23 "prevrel/$2" "summary/$2" | sed 's/^/- /'; echo
+          }
+          {
+            echo "Unofficial build of [Voice Keyboard](https://github.com/rustemar/voice-keyboard) by **rustemar** (MIT), upstream \`$TAG\` ([release notes](https://github.com/rustemar/voice-keyboard/releases/tag/$TAG)), plus the patches listed below. Not affiliated with or endorsed by rustemar. Please report problems with this build here, not upstream."
+            echo
+            echo "### Patches"
+            echo
+            if [ -s summary/patches.txt ]; then
+              sed 's/^/- /' summary/patches.txt
+            else
+              echo "- (none)"
+            fi
+            echo
+            if $HAVE_PREV; then
+              echo "### Since \`$PREV\`"; echo
+              section "Permissions" permissions.txt
+              section "Dependencies" dependencies.txt
+              section "Domains (source grep)" domains.txt
+            else
+              echo "### Inventory (no previous release to compare)"; echo
+              echo "**Permissions:**"; sed 's/^/- /' summary/permissions.txt; echo
+              echo "**Domains (source grep):**"; sed 's/^/- /' summary/domains.txt; echo
+              echo "Dependencies: see attached dependencies.txt"
+            fi
+            echo
+            echo "_This is a change summary, not a security audit._"
+            echo
+            echo "Signer SHA-256: \`$CERT\`"
+          } > notes.md
+          cat notes.md
+
+      - name: Publish, staged (R11, R12)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Never delete. Create as draft (or reuse existing), upload assets with --clobber, then publish.
+          if ! gh release view "$JF_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$JF_TAG" --repo "$GITHUB_REPOSITORY" --draft \
+              --target "${{ github.event.repository.default_branch }}" \
+              --title "Voice Keyboard $JF_TAG (unofficial fork build)" --notes "publishing..."
+          fi
+          gh release upload "$JF_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "out/VoiceKeyboard-JF-$JF_TAG.apk" summary/permissions.txt summary/dependencies.txt \
+            summary/domains.txt summary/LICENSE
+          gh release edit "$JF_TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md --draft=false
