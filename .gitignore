@@ -1,0 +1,19 @@
+# Local-only material (shelved Dictate plan, reviews, drafts)
+archive/
+
+# Signing material must never be committed
+*.jks
+*.keystore
+*.p12
+*.pem
+keystore.properties
+local.properties
+
+# Build output
+upstream/
+out/
+summary/
+*.apk
+*.aab
+.gradle/
+build/
