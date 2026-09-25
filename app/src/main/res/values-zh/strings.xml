@@ -11,6 +11,8 @@
     <string name="settings_language_hint">以逗号分隔的代码，例如：zh, en。指定多个时，键盘上会出现语言切换键。留空则自动检测。</string>
     <string name="settings_endpoint">API 地址</string>
     <string name="settings_auto_record">自动录音</string>
+    <string name="settings_return_to_previous_keyboard">插入后返回上一个键盘</string>
+    <string name="cd_previous_keyboard">切换到上一个键盘</string>
     <string name="settings_add_space">末尾添加空格</string>
     <string name="settings_apply">应用</string>
     <string name="settings_enable_instructions">启用此键盘：\n\n1. 前往设置 → 系统 → 语言和输入法 → 屏幕键盘\n2. 启用 \"Voice Keyboard\"\n3. 在任意文本框中切换到该键盘</string>

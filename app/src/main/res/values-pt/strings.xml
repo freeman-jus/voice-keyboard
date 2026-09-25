@@ -11,6 +11,8 @@
     <string name="settings_language_hint">Códigos separados por vírgulas, por exemplo: pt, en. Se indicar mais de um, aparece uma tecla de idioma no teclado. Deixe vazio para deteção automática.</string>
     <string name="settings_endpoint">Endpoint da API</string>
     <string name="settings_auto_record">Gravação automática</string>
+    <string name="settings_return_to_previous_keyboard">Voltar ao teclado anterior após inserir</string>
+    <string name="cd_previous_keyboard">Mudar para o teclado anterior</string>
     <string name="settings_add_space">Adicionar espaço no final</string>
     <string name="settings_apply">Aplicar</string>
     <string name="settings_enable_instructions">Para ativar este teclado:\n\n1. Vá em Configurações → Sistema → Idiomas e entrada → Teclado na tela\n2. Ative \"Voice Keyboard\"\n3. Selecione-o em qualquer campo de texto</string>

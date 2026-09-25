@@ -11,6 +11,8 @@
     <string name="settings_language_hint">Codes durch Komma getrennt, zum Beispiel: de, en. Bei mehreren Sprachen erscheint eine Sprachtaste auf der Tastatur. Leer lassen für automatische Erkennung.</string>
     <string name="settings_endpoint">API-Endpunkt</string>
     <string name="settings_auto_record">Automatische Aufnahme</string>
+    <string name="settings_return_to_previous_keyboard">Nach dem Einfügen zur vorherigen Tastatur zurückkehren</string>
+    <string name="cd_previous_keyboard">Zur vorherigen Tastatur wechseln</string>
     <string name="settings_add_space">Leerzeichen am Ende hinzufügen</string>
     <string name="settings_apply">Übernehmen</string>
     <string name="settings_enable_instructions">Um diese Tastatur zu aktivieren:\n\n1. Gehen Sie zu Einstellungen → System → Sprachen und Eingabe → Bildschirmtastatur\n2. Aktivieren Sie \"Voice Keyboard\"\n3. Wählen Sie sie in einem beliebigen Textfeld aus</string>
