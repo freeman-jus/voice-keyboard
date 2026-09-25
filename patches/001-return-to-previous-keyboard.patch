@@ -7,7 +7,10 @@ the queue and no failed or parked recording waiting for resend, the keyboard han
 to the keyboard that opened it: switchToPreviousInputMethod() on API 28+, requestHideSelf(0) if
 that fails or on older Android. Errors, parked recordings and cancel never trigger it. With the
 setting off the app behaves exactly as upstream. The decision is a pure function
-(ReturnToPreviousKeyboard) with a JVM unit test.
+(ReturnToPreviousKeyboard) with a JVM unit test. Also adds a "switch to previous keyboard" key
+(bottom row, left of the space bar) that is always available regardless of that setting: it calls
+the same switchToPreviousInputMethod()-then-fallback logic, falling back to the input method
+picker instead of requestHideSelf(0) since there may be nothing to hand dictation back to.
 
 Why: SPEC.md R6. HeliBoard's mic key opens this keyboard for voice input; without this the user
 has to switch back by hand after every dictation.
@@ -63,7 +66,7 @@ index 9eef87c..88edab5 100644
      val languageCodes: List<String> get() = TranscriptionLocale.parseCodes(languages)
  
 diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt
-index dcd8cb7..c390743 100644
+index dcd8cb7..b0daded 100644
 --- a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt
 +++ b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt
 @@ -5,6 +5,7 @@ import android.content.ClipboardManager
@@ -87,7 +90,7 @@ index dcd8cb7..c390743 100644
              },
              onPhaseChanged = { phase -> panel.transitionTo(phase) },
              onAmplitude = { level -> panel.animator.adjustForAmplitude(level) },
-@@ -130,6 +133,24 @@ class DictationInputMethod : InputMethodService() {
+@@ -130,6 +133,32 @@ class DictationInputMethod : InputMethodService() {
          clipboard.setPrimaryClip(ClipData.newPlainText("Voice transcription", text))
      }
  
@@ -105,13 +108,44 @@ index dcd8cb7..c390743 100644
 +            failedCount = ServiceLocator.parkedRecordingStore.count.value
 +        )
 +        if (!handBack) return
++        switchToPreviousKeyboard { requestHideSelf(0) }
++    }
++
++    /**
++     * Switches to the keyboard that opened this one, falling back to [onNoPreviousKeyboard] when
++     * there is none to switch to (API < 28) or the platform declines the switch.
++     */
++    private fun switchToPreviousKeyboard(onNoPreviousKeyboard: () -> Unit) {
 +        val switched = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && switchToPreviousInputMethod()
-+        if (!switched) requestHideSelf(0)
++        if (!switched) onNoPreviousKeyboard()
 +    }
 +
      override fun onDestroy() {
          super.onDestroy()
          clipboardListener?.let {
+@@ -143,6 +172,7 @@ class DictationInputMethod : InputMethodService() {
+         val btnMic: ImageButton = view.findViewById(R.id.btnMic)
+         val btnCancel: ImageButton = view.findViewById(R.id.btnCancel)
+         val btnBackspace: ImageButton = view.findViewById(R.id.btnBackspace)
++        val btnPreviousKeyboard: ImageButton = view.findViewById(R.id.btnPreviousKeyboard)
+         val btnSpace: Button = view.findViewById(R.id.btnSpace)
+         val btnEnter: ImageButton = view.findViewById(R.id.btnEnter)
+         val btnPeriod: Button = view.findViewById(R.id.btnPeriod)
+@@ -188,6 +218,14 @@ class DictationInputMethod : InputMethodService() {
+ 
+         btnCutAll.setOnClickListener { keystrokes.cutAll() }
+ 
++        // Always available, independent of the "Return to previous keyboard after inserting"
++        // setting: one tap gets back to whatever keyboard opened this one.
++        btnPreviousKeyboard.setOnClickListener {
++            switchToPreviousKeyboard {
++                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
++            }
++        }
++
+         btnSpace.setOnClickListener { keystrokes.insertText(" ") }
+         btnSpace.setOnLongClickListener {
+             val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
 diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/InputOrchestrator.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/InputOrchestrator.kt
 index 096427e..a2e8032 100644
 --- a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/InputOrchestrator.kt
@@ -191,6 +225,23 @@ index ccef529..ec6b262 100644
      )
  
      private fun showApiStatus(message: String, color: Int) {
+diff --git a/app/src/main/res/drawable/ic_keyboard_return.xml b/app/src/main/res/drawable/ic_keyboard_return.xml
+new file mode 100644
+index 0000000..b829b0e
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_keyboard_return.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <!-- Material "keyboard" icon: switch to another keyboard -->
++    <path
++        android:fillColor="@color/key_text"
++        android:pathData="M20,5H4C2.9,5 2,5.9 2,7v10c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V7C22,5.9 21.1,5 20,5zM11,8h2v2h-2V8zM11,11h2v2h-2V11zM8,8h2v2H8V8zM8,11h2v2H8V11zM5,8h2v2H5V8zM5,11h2v2H5V11zM6,14h12v2H6V14zM14,8h2v2h-2V8zM14,11h2v2h-2V11zM17,8h2v2h-2V8zM17,11h2v2h-2V11z" />
++</vector>
 diff --git a/app/src/main/res/layout/activity_setup.xml b/app/src/main/res/layout/activity_setup.xml
 index 1b30c73..ed268c4 100644
 --- a/app/src/main/res/layout/activity_setup.xml
@@ -213,15 +264,44 @@ index 1b30c73..ed268c4 100644
          <!-- Add trailing space -->
          <Switch
              android:id="@+id/switchAddSpace"
+diff --git a/app/src/main/res/layout/input_panel.xml b/app/src/main/res/layout/input_panel.xml
+index f8b6590..f2c630e 100644
+--- a/app/src/main/res/layout/input_panel.xml
++++ b/app/src/main/res/layout/input_panel.xml
+@@ -397,6 +397,23 @@
+             android:layout_height="0dp"
+             android:visibility="gone" />
+ 
++        <ImageButton
++            android:id="@+id/btnPreviousKeyboard"
++            android:layout_width="36dp"
++            android:layout_height="match_parent"
++            android:background="@drawable/key_bg"
++            android:src="@drawable/ic_keyboard_return"
++            android:contentDescription="@string/cd_previous_keyboard"
++            android:scaleType="centerInside"
++            android:minWidth="0dp"
++            android:minHeight="0dp"
++            android:padding="0dp"
++            app:tint="@color/key_text" />
++
++        <View
++            android:layout_width="6dp"
++            android:layout_height="0dp" />
++
+         <Button
+             android:id="@+id/btnSpace"
+             android:layout_width="0dp"
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index f8e5692..837007a 100644
+index f8e5692..62985b5 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -12,6 +12,7 @@
+@@ -12,6 +12,8 @@
      <string name="settings_language_hint">Comma-separated codes, for example: en, ru. Add more than one and a language key appears on the keyboard. Leave empty to detect automatically.</string>
      <string name="settings_endpoint">API Endpoint</string>
      <string name="settings_auto_record">Auto-start recording</string>
 +    <string name="settings_return_to_previous_keyboard">Return to previous keyboard after inserting</string>
++    <string name="cd_previous_keyboard">Switch to previous keyboard</string>
      <string name="settings_add_space">Add trailing space</string>
      <string name="settings_apply">Apply</string>
      <string name="settings_enable_instructions">To enable this keyboard:\n\n1. Go to Settings → System → Languages &amp; input → On-screen keyboard\n2. Enable \"Voice Keyboard\"\n3. Switch to it in any text field</string>
