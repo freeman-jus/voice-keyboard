@@ -106,7 +106,8 @@ Use JDK 17 (Temurin) and `runs-on: ubuntu-24.04`. No signing environment variabl
 **R7 Patch `002-side-by-side-identity.patch`.**
 - In `app/build.gradle.kts` `defaultConfig`, add `applicationIdSuffix = ".jf"`, giving the package `com.tyraen.voicekeyboard.jf`.
 - In `res/values/strings.xml`, set `app_name` to **"Voice Keyboard (JF)"**.
-- Nothing else: namespace, classes and `method.xml` stay unchanged. The code uses `packageName` dynamically; there are no hard-coded package strings, which was verified at v1.9.1.
+- In `res/xml/method.xml`, add `android:overridesImplicitlyEnabledSubtype="true"` to the voice subtype. Without it, GrapheneOS left the subtype disabled and HeliBoard showed no mic key (observed 2026-09-25).
+- Nothing else: namespace and classes stay unchanged. The code uses `packageName` dynamically; there are no hard-coded package strings, which was verified at v1.9.1.
 
 **R8 Signing, isolated.**
 - A separate `sign` job that runs no upstream code does the signing.
