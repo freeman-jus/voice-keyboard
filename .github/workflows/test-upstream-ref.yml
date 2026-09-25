@@ -1,0 +1,290 @@
+# Requirement IDs (R*, N*) refer to SPEC.md. Sibling of build-release.yml, for manual test
+# builds of an arbitrary upstream ref (e.g. a PR head) rather than a released tag.
+#
+# Security model, mirroring build-release.yml (SPEC §3, R8, N6):
+#   job "build"  runs UPSTREAM CODE at an arbitrary ref, with identity edits only (no patches).
+#                contents:read only, no secrets.*, no persisted git credentials on any checkout.
+#                Produces an unsigned APK + LICENSE.
+#   job "sign"   runs NO upstream code. It alone sees the JF_* keystore secrets and has
+#                contents:write. Only the build artifact crosses the boundary, and its SHA-256
+#                is re-verified here before anything is signed. Publishes a GitHub pre-release
+#                (draft -> upload --clobber -> publish, never deleted) for manual device testing.
+
+name: Test build of upstream ref
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Upstream commit SHA (e.g. 1dba118) or ref (e.g. refs/pull/5/head) to build"
+        required: true
+        type: string
+      note:
+        description: "Optional note, e.g. 'PR #5'"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: test-upstream-ref
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: rustemar/voice-keyboard
+
+jobs:
+  # ---------------------------------------------------------------- build (runs upstream code; no secrets)
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      short: ${{ steps.resolve.outputs.short }}
+      version_name: ${{ steps.stamp.outputs.version_name }}
+      test_tag: ${{ steps.stamp.outputs.test_tag }}
+      apk_sha256: ${{ steps.pack.outputs.apk_sha256 }}
+    steps:
+      - name: Resolve upstream ref to a full commit SHA
+        id: resolve
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          SHA=$(GH_TOKEN="${{ github.token }}" gh api "repos/$UPSTREAM_REPO/commits/$INPUT_REF" --jq .sha)
+          [ -n "$SHA" ] && [ "$SHA" != "null" ] || {
+            echo "::error::Could not resolve ref '$INPUT_REF' to a commit SHA"; exit 1; }
+          SHORT="${SHA:0:7}"
+          {
+            echo "sha=$SHA"
+            echo "short=$SHORT"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved $INPUT_REF -> $SHA ($SHORT)"
+
+      - name: Check out upstream at resolved commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ steps.resolve.outputs.sha }}
+          path: upstream
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-provider: basic   # avoid the proprietary/commercial gradle-actions cache
+
+      - name: Apply fork identity (no patches; ref already contains the feature under test)
+        id: stamp
+        working-directory: upstream
+        env:
+          SHORT: ${{ steps.resolve.outputs.short }}
+        run: |
+          set -euo pipefail
+
+          GRADLE_FILE="app/build.gradle.kts"
+          STRINGS_FILE="app/src/main/res/values/strings.xml"
+
+          # 1. applicationIdSuffix, anchored after the applicationId line, same indentation.
+          APPID_PATTERN='^([[:space:]]*)applicationId = "com\.tyraen\.voicekeyboard"[[:space:]]*$'
+          MATCHES=$(grep -cE "$APPID_PATTERN" "$GRADLE_FILE")
+          if [ "$MATCHES" -ne 1 ]; then
+            echo "::error::Expected exactly one applicationId line in $GRADLE_FILE, found $MATCHES"
+            exit 1
+          fi
+          INDENT=$(grep -E "$APPID_PATTERN" "$GRADLE_FILE" | sed -E 's/^([[:space:]]*).*/\1/')
+          sed -i -E "s/^([[:space:]]*)applicationId = \"com\.tyraen\.voicekeyboard\"[[:space:]]*\$/&\n${INDENT}applicationIdSuffix = \".jf\"/" "$GRADLE_FILE"
+          CHANGED=$(grep -c 'applicationIdSuffix = "\.jf"' "$GRADLE_FILE")
+          if [ "$CHANGED" -ne 1 ]; then
+            echo "::error::applicationIdSuffix insertion did not happen exactly once (found $CHANGED)"
+            exit 1
+          fi
+
+          # 2. App name.
+          MATCHES=$(grep -cF '<string name="app_name">Voice Keyboard</string>' "$STRINGS_FILE")
+          if [ "$MATCHES" -ne 1 ]; then
+            echo "::error::Expected exactly one app_name string in $STRINGS_FILE, found $MATCHES"
+            exit 1
+          fi
+          sed -i 's#<string name="app_name">Voice Keyboard</string>#<string name="app_name">Voice Keyboard (JF)</string>#' "$STRINGS_FILE"
+          CHANGED=$(grep -cF '<string name="app_name">Voice Keyboard (JF)</string>' "$STRINGS_FILE")
+          if [ "$CHANGED" -ne 1 ]; then
+            echo "::error::app_name substitution did not happen exactly once (found $CHANGED)"
+            exit 1
+          fi
+
+          # 3. versionName stamp: X.Y.Z -> X.Y.Z-test.<short>.<run_number>.
+          MATCHES=$(grep -cE 'versionName = "[0-9]+\.[0-9]+\.[0-9]+"' "$GRADLE_FILE")
+          if [ "$MATCHES" -ne 1 ]; then
+            echo "::error::Expected exactly one versionName literal in $GRADLE_FILE, found $MATCHES"
+            exit 1
+          fi
+          BASE_VERSION=$(grep -oE 'versionName = "[0-9]+\.[0-9]+\.[0-9]+"' "$GRADLE_FILE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          VERSION_NAME="${BASE_VERSION}-test.${SHORT}.${GITHUB_RUN_NUMBER}"
+          TEST_TAG="test-${SHORT}-${GITHUB_RUN_NUMBER}"
+          sed -i -E 's/versionName = "[0-9]+\.[0-9]+\.[0-9]+"/versionName = "'"$VERSION_NAME"'"/' "$GRADLE_FILE"
+          CHANGED=$(grep -c "versionName = \"$VERSION_NAME\"" "$GRADLE_FILE")
+          if [ "$CHANGED" -ne 1 ]; then
+            echo "::error::versionName substitution did not happen exactly once (found $CHANGED)"
+            exit 1
+          fi
+
+          {
+            echo "version_name=$VERSION_NAME"
+            echo "test_tag=$TEST_TAG"
+          } >> "$GITHUB_OUTPUT"
+          echo "Stamped versionName -> $VERSION_NAME (test_tag=$TEST_TAG)"
+
+      - name: Run unit tests and build unsigned release
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          ./gradlew testDebugUnitTest --no-daemon
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Collect unsigned APK and LICENSE
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          mkdir -p ../summary
+          APK="app/build/outputs/apk/release/VoiceKeyboard.apk"
+          if [ ! -f "$APK" ]; then
+            echo "::error::Unsigned APK not found at $APK"
+            ls -R app/build/outputs/apk || true
+            exit 1
+          fi
+          cp "$APK" ../summary/unsigned.apk
+          cp LICENSE ../summary/LICENSE
+
+      - name: Guard package id and versionName
+        working-directory: upstream
+        env:
+          VERSION_NAME: ${{ steps.stamp.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          BADGING=$("$BT/aapt2" dump badging ../summary/unsigned.apk)
+          PKG=$(echo "$BADGING" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          VN=$(echo "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+          [ "$PKG" = "com.tyraen.voicekeyboard.jf" ] || {
+            echo "::error::Package id is '$PKG', expected com.tyraen.voicekeyboard.jf"; exit 1; }
+          [ "$VN" = "$VERSION_NAME" ] || {
+            echo "::error::versionName is '$VN', expected $VERSION_NAME"; exit 1; }
+          echo "Guard passed: $PKG $VN"
+
+      - name: Record artifact digest
+        id: pack
+        run: |
+          set -euo pipefail
+          SHA256=$(sha256sum summary/unsigned.apk | awk '{print $1}')
+          echo "apk_sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "unsigned APK sha256: $SHA256"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-${{ steps.stamp.outputs.test_tag }}
+          path: summary/
+          retention-days: 3
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------- sign + publish (no upstream code)
+  sign:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      SHA: ${{ needs.build.outputs.sha }}
+      SHORT: ${{ needs.build.outputs.short }}
+      TEST_TAG: ${{ needs.build.outputs.test_tag }}
+      NOTE: ${{ inputs.note }}
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: unsigned-${{ needs.build.outputs.test_tag }}
+          path: summary
+
+      - name: Verify artifact digest matches what the build job produced
+        env:
+          EXPECTED_SHA: ${{ needs.build.outputs.apk_sha256 }}
+        run: |
+          set -euo pipefail
+          ACTUAL=$(sha256sum summary/unsigned.apk | awk '{print $1}')
+          [ "$ACTUAL" = "$EXPECTED_SHA" ] || { echo "::error::Artifact digest mismatch"; exit 1; }
+
+      - name: Sign
+        env:
+          JF_KEYSTORE_BASE64: ${{ secrets.JF_KEYSTORE_BASE64 }}
+          JF_KEYSTORE_PASSWORD: ${{ secrets.JF_KEYSTORE_PASSWORD }}
+          JF_KEY_ALIAS: ${{ secrets.JF_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          KS="$RUNNER_TEMP/release.p12"
+          # tr: tolerate CR/LF/spaces a Windows shell may have added when the secret was set
+          printf '%s' "$JF_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$KS"
+          mkdir -p out
+          "$BT/zipalign" -p -f 4 summary/unsigned.apk out/aligned.apk
+          "$BT/apksigner" sign \
+            --ks "$KS" --ks-type PKCS12 \
+            --ks-pass env:JF_KEYSTORE_PASSWORD --key-pass env:JF_KEYSTORE_PASSWORD \
+            --ks-key-alias "$JF_KEY_ALIAS" \
+            --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true \
+            --out "out/VoiceKeyboard-JF-$TEST_TAG.apk" out/aligned.apk
+          shred -u "$KS" 2>/dev/null || rm -f "$KS"
+          rm -f out/aligned.apk
+
+      - name: Fingerprint guard
+        env:
+          EXPECTED_CERT_SHA256: ${{ vars.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          [ -n "$EXPECTED_CERT_SHA256" ] || { echo "::error::EXPECTED_CERT_SHA256 repo variable not set"; exit 1; }
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          # Tolerate keytool's "SHA256: AA:BB:..." form: drop the label, colons, spaces; lowercase.
+          NORM_EXPECTED=$(echo "$EXPECTED_CERT_SHA256" | sed -E 's/^[[:space:]]*[Ss][Hh][Aa]-?256:?//' \
+                            | tr -d ': ' | tr 'A-F' 'a-f')
+          [ "${#NORM_EXPECTED}" -eq 64 ] || {
+            echo "::error::EXPECTED_CERT_SHA256 does not look like a SHA-256 fingerprint"; exit 1; }
+          ACTUAL=$("$BT/apksigner" verify --print-certs "out/VoiceKeyboard-JF-$TEST_TAG.apk" \
+                    | grep -m1 'certificate SHA-256 digest' | awk '{print $NF}' | tr -d ': ' | tr 'A-F' 'a-f')
+          [ "$ACTUAL" = "$NORM_EXPECTED" ] || {
+            echo "::error::Signer fingerprint mismatch: got $ACTUAL, expected $NORM_EXPECTED"; exit 1; }
+          echo "CERT=$ACTUAL" >> "$GITHUB_ENV"
+
+      - name: Notes and attribution
+        run: |
+          set -euo pipefail
+          NOTE_SUFFIX=""
+          [ -n "$NOTE" ] && NOTE_SUFFIX=" ($NOTE)"
+          {
+            echo "**Test build, not for general use.** Unofficial build of [Voice Keyboard](https://github.com/$UPSTREAM_REPO) by **rustemar** (MIT) at upstream commit [\`$SHORT\`](https://github.com/$UPSTREAM_REPO/commit/$SHA)$NOTE_SUFFIX, with only this fork's package id and app name applied. Not affiliated with or endorsed by rustemar."
+            echo
+            echo "Signer SHA-256: \`$CERT\`"
+          } > notes.md
+          cat notes.md
+
+      - name: Publish, staged pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="Voice Keyboard test build $SHORT"
+          [ -n "$NOTE" ] && TITLE="$TITLE ($NOTE)"
+          # Never delete. Create as draft pre-release (or reuse existing), upload assets with
+          # --clobber, then publish. Stays a pre-release so Obtainium's default settings ignore it.
+          if ! gh release view "$TEST_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TEST_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --draft \
+              --target "${{ github.event.repository.default_branch }}" \
+              --title "$TITLE" --notes "publishing..."
+          fi
+          gh release upload "$TEST_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "out/VoiceKeyboard-JF-$TEST_TAG.apk" summary/LICENSE
+          gh release edit "$TEST_TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md \
+            --draft=false --prerelease
