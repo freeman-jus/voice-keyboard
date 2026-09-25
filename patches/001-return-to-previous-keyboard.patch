@@ -66,7 +66,7 @@ index 9eef87c..88edab5 100644
      val languageCodes: List<String> get() = TranscriptionLocale.parseCodes(languages)
  
 diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt
-index dcd8cb7..b0daded 100644
+index dcd8cb7..358c8d1 100644
 --- a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt
 +++ b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/DictationInputMethod.kt
 @@ -5,6 +5,7 @@ import android.content.ClipboardManager
@@ -90,7 +90,7 @@ index dcd8cb7..b0daded 100644
              },
              onPhaseChanged = { phase -> panel.transitionTo(phase) },
              onAmplitude = { level -> panel.animator.adjustForAmplitude(level) },
-@@ -130,6 +133,32 @@ class DictationInputMethod : InputMethodService() {
+@@ -130,6 +133,33 @@ class DictationInputMethod : InputMethodService() {
          clipboard.setPrimaryClip(ClipData.newPlainText("Voice transcription", text))
      }
  
@@ -105,7 +105,8 @@ index dcd8cb7..b0daded 100644
 +            capturing = orchestrator.currentPhase is InputPhase.Capturing,
 +            // Decided synchronously inside the queue's delivery, where pendingCount still counts this recording.
 +            pendingCount = ServiceLocator.transcriptionQueue.pendingCount - 1,
-+            failedCount = ServiceLocator.parkedRecordingStore.count.value
++            failedCount = ServiceLocator.parkedRecordingStore.count.value,
++            parkedLoaded = ServiceLocator.parkedRecordingStore.isLoaded
 +        )
 +        if (!handBack) return
 +        switchToPreviousKeyboard { requestHideSelf(0) }
@@ -123,7 +124,7 @@ index dcd8cb7..b0daded 100644
      override fun onDestroy() {
          super.onDestroy()
          clipboardListener?.let {
-@@ -143,6 +172,7 @@ class DictationInputMethod : InputMethodService() {
+@@ -143,6 +173,7 @@ class DictationInputMethod : InputMethodService() {
          val btnMic: ImageButton = view.findViewById(R.id.btnMic)
          val btnCancel: ImageButton = view.findViewById(R.id.btnCancel)
          val btnBackspace: ImageButton = view.findViewById(R.id.btnBackspace)
@@ -131,7 +132,7 @@ index dcd8cb7..b0daded 100644
          val btnSpace: Button = view.findViewById(R.id.btnSpace)
          val btnEnter: ImageButton = view.findViewById(R.id.btnEnter)
          val btnPeriod: Button = view.findViewById(R.id.btnPeriod)
-@@ -188,6 +218,14 @@ class DictationInputMethod : InputMethodService() {
+@@ -188,6 +219,14 @@ class DictationInputMethod : InputMethodService() {
  
          btnCutAll.setOnClickListener { keystrokes.cutAll() }
  
@@ -159,12 +160,57 @@ index 096427e..a2e8032 100644
      /** Every dictation language the user configured, in the order they listed them. */
      fun getLanguageCodes(): List<String> = preferences?.languageCodes ?: emptyList()
  
+diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/KeystrokeDispatcher.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/KeystrokeDispatcher.kt
+index d52e2ae..5222eaf 100644
+--- a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/KeystrokeDispatcher.kt
++++ b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/KeystrokeDispatcher.kt
+@@ -59,6 +59,7 @@ class KeystrokeDispatcher(private val connectionProvider: () -> InputConnection?
+     /**
+      * Commit a dictated chunk with context-aware padding: a space in front when the cursor sits
+      * right after a word, the configured trailing space only when nothing is already there.
++     * Returns false if the text didn't reach the field, so the caller can fall back.
+      */
+     fun insertDictation(text: String, addTrailingSpace: Boolean): Boolean {
+         val ic = connectionProvider() ?: return false
+@@ -72,8 +73,7 @@ class KeystrokeDispatcher(private val connectionProvider: () -> InputConnection?
+             append(text)
+             if (pad.trailing) append(' ')
+         }
+-        ic.commitText(out, 1)
+-        return true
++        return ic.commitText(out, 1)
+     }
+ 
+     /**
+diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ParkedRecordingStore.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ParkedRecordingStore.kt
+index 2d90470..a37afff 100644
+--- a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ParkedRecordingStore.kt
++++ b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ParkedRecordingStore.kt
+@@ -45,6 +45,10 @@ class ParkedRecordingStore(context: Context) {
+     /** Total parked recordings (any state). Drives the resend badge; survives view rebuilds. */
+     val count: StateFlow<Int> = _count
+ 
++    @Volatile private var loadPublished = false
++    /** Thread-safe read-only signal that the initial load has published its results. */
++    val isLoaded: Boolean get() = loadPublished
++
+     /** Scan disk and load any parked recordings. Idempotent; safe to call from app startup. */
+     suspend fun ensureLoaded() = withContext(dispatcher) { loadIfNeeded() }
+ 
+@@ -73,6 +77,7 @@ class ParkedRecordingStore(context: Context) {
+         // Note: orphan audio with no sidecar is intentionally left untouched — we can't reconstruct
+         // its config, but deleting it is exactly the data loss we are preventing.
+         publish()
++        loadPublished = true
+         DiagnosticLog.record(TAG, "Loaded ${items.size} parked recording(s)")
+     }
+ 
 diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboard.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboard.kt
 new file mode 100644
-index 0000000..585cec4
+index 0000000..eb1419e
 --- /dev/null
 +++ b/app/src/main/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboard.kt
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,25 @@
 +package com.tyraen.voicekeyboard.feature.ime
 +
 +/**
@@ -178,14 +224,17 @@ index 0000000..585cec4
 +    /**
 +     * [inserted] is false when the text went to the clipboard instead of the field.
 +     * [pendingCount] must not count the recording that was just delivered.
++     * [parkedLoaded] is false until the parked-recording store has published its initial load;
++     * before that, [failedCount] can't be trusted to be zero.
 +     */
 +    fun shouldReturnToPreviousKeyboard(
 +        enabled: Boolean,
 +        inserted: Boolean,
 +        capturing: Boolean,
 +        pendingCount: Int,
-+        failedCount: Int
-+    ): Boolean = enabled && inserted && !capturing && pendingCount == 0 && failedCount == 0
++        failedCount: Int,
++        parkedLoaded: Boolean
++    ): Boolean = parkedLoaded && enabled && inserted && !capturing && pendingCount == 0 && failedCount == 0
 +}
 diff --git a/app/src/main/java/com/tyraen/voicekeyboard/feature/setup/SetupActivity.kt b/app/src/main/java/com/tyraen/voicekeyboard/feature/setup/SetupActivity.kt
 index ccef529..ec6b262 100644
@@ -292,6 +341,214 @@ index f8b6590..f2c630e 100644
          <Button
              android:id="@+id/btnSpace"
              android:layout_width="0dp"
+diff --git a/app/src/main/res/values-ar/strings.xml b/app/src/main/res/values-ar/strings.xml
+index 2b4b347..46502ee 100644
+--- a/app/src/main/res/values-ar/strings.xml
++++ b/app/src/main/res/values-ar/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">رموز مفصولة بفواصل، مثل: ar, en. عند إضافة أكثر من لغة يظهر مفتاح لغة على لوحة المفاتيح. اتركه فارغًا للاكتشاف التلقائي.</string>
+     <string name="settings_endpoint">عنوان API</string>
+     <string name="settings_auto_record">تسجيل تلقائي</string>
++    <string name="settings_return_to_previous_keyboard">العودة إلى لوحة المفاتيح السابقة بعد الإدراج</string>
++    <string name="cd_previous_keyboard">التبديل إلى لوحة المفاتيح السابقة</string>
+     <string name="settings_add_space">إضافة مسافة في النهاية</string>
+     <string name="settings_apply">تطبيق</string>
+     <string name="settings_enable_instructions">لتفعيل لوحة المفاتيح:\n\n1. اذهب إلى الإعدادات → النظام → اللغات والإدخال → لوحة المفاتيح على الشاشة\n2. فعّل \"Voice Keyboard\"\n3. اختره في أي حقل نصي</string>
+diff --git a/app/src/main/res/values-be/strings.xml b/app/src/main/res/values-be/strings.xml
+index 0e83c3c..bc17781 100644
+--- a/app/src/main/res/values-be/strings.xml
++++ b/app/src/main/res/values-be/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Коды праз коску, напрыклад: be, en. Калі ўказаць некалькі, на клавіятуры з\'явіцца кнопка пераключэння мовы. Пакіньце пустым для аўтаматычнага вызначэння.</string>
+     <string name="settings_endpoint">Адрас API</string>
+     <string name="settings_auto_record">Аўтаматычны запіс</string>
++    <string name="settings_return_to_previous_keyboard">Вяртацца да папярэдняй клавіятуры пасля ўстаўкі</string>
++    <string name="cd_previous_keyboard">Пераключыцца на папярэднюю клавіятуру</string>
+     <string name="settings_add_space">Дадаваць прабел у канцы</string>
+     <string name="settings_apply">Прымяніць</string>
+     <string name="settings_enable_instructions">Каб уключыць гэту клавіятуру:\n\n1. Перайдзіце ў Налады → Сістэма → Мовы і ўвод → Экранная клавіятура\n2. Уключыце \"Voice Keyboard\"\n3. Абярыце яе ў любым тэкставым полі</string>
+diff --git a/app/src/main/res/values-de/strings.xml b/app/src/main/res/values-de/strings.xml
+index 3ee7695..4537459 100644
+--- a/app/src/main/res/values-de/strings.xml
++++ b/app/src/main/res/values-de/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Codes durch Komma getrennt, zum Beispiel: de, en. Bei mehreren Sprachen erscheint eine Sprachtaste auf der Tastatur. Leer lassen für automatische Erkennung.</string>
+     <string name="settings_endpoint">API-Endpunkt</string>
+     <string name="settings_auto_record">Automatische Aufnahme</string>
++    <string name="settings_return_to_previous_keyboard">Nach dem Einfügen zur vorherigen Tastatur zurückkehren</string>
++    <string name="cd_previous_keyboard">Zur vorherigen Tastatur wechseln</string>
+     <string name="settings_add_space">Leerzeichen am Ende hinzufügen</string>
+     <string name="settings_apply">Übernehmen</string>
+     <string name="settings_enable_instructions">Um diese Tastatur zu aktivieren:\n\n1. Gehen Sie zu Einstellungen → System → Sprachen und Eingabe → Bildschirmtastatur\n2. Aktivieren Sie \"Voice Keyboard\"\n3. Wählen Sie sie in einem beliebigen Textfeld aus</string>
+diff --git a/app/src/main/res/values-el/strings.xml b/app/src/main/res/values-el/strings.xml
+index 38f9346..ec1f23e 100644
+--- a/app/src/main/res/values-el/strings.xml
++++ b/app/src/main/res/values-el/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Κωδικοί χωρισμένοι με κόμμα, για παράδειγμα: el, en. Αν προσθέσετε περισσότερους από έναν, εμφανίζεται πλήκτρο γλώσσας στο πληκτρολόγιο. Αφήστε το κενό για αυτόματη ανίχνευση.</string>
+     <string name="settings_endpoint">Διεύθυνση API</string>
+     <string name="settings_auto_record">Αυτόματη εγγραφή</string>
++    <string name="settings_return_to_previous_keyboard">Επιστροφή στο προηγούμενο πληκτρολόγιο μετά την εισαγωγή</string>
++    <string name="cd_previous_keyboard">Εναλλαγή στο προηγούμενο πληκτρολόγιο</string>
+     <string name="settings_add_space">Προσθήκη κενού στο τέλος</string>
+     <string name="settings_apply">Εφαρμογή</string>
+     <string name="settings_enable_instructions">Για να ενεργοποιήσετε αυτό το πληκτρολόγιο:\n\n1. Μεταβείτε στις Ρυθμίσεις → Σύστημα → Γλώσσες και εισαγωγή → Πληκτρολόγιο οθόνης\n2. Ενεργοποιήστε το \"Voice Keyboard\"\n3. Επιλέξτε το σε οποιοδήποτε πεδίο κειμένου</string>
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index 3a77a9b..49a7a82 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Códigos separados por comas, por ejemplo: es, en. Si añades más de uno, aparece una tecla de idioma en el teclado. Déjalo vacío para detectarlo automáticamente.</string>
+     <string name="settings_endpoint">Endpoint de API</string>
+     <string name="settings_auto_record">Grabación automática</string>
++    <string name="settings_return_to_previous_keyboard">Volver al teclado anterior después de insertar</string>
++    <string name="cd_previous_keyboard">Cambiar al teclado anterior</string>
+     <string name="settings_add_space">Añadir espacio al final</string>
+     <string name="settings_apply">Aplicar</string>
+     <string name="settings_enable_instructions">Para activar este teclado:\n\n1. Ve a Ajustes → Sistema → Idiomas e introducción → Teclado en pantalla\n2. Activa \"Voice Keyboard\"\n3. Selecciónalo en cualquier campo de texto</string>
+diff --git a/app/src/main/res/values-fi/strings.xml b/app/src/main/res/values-fi/strings.xml
+index dfad248..cb29a27 100644
+--- a/app/src/main/res/values-fi/strings.xml
++++ b/app/src/main/res/values-fi/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Pilkulla erotetut koodit, esimerkiksi: fi, en. Jos lisäät useamman, näppäimistölle ilmestyy kielinäppäin. Jätä tyhjäksi automaattista tunnistusta varten.</string>
+     <string name="settings_endpoint">API-osoite</string>
+     <string name="settings_auto_record">Automaattinen nauhoitus</string>
++    <string name="settings_return_to_previous_keyboard">Palaa edelliseen näppäimistöön lisäämisen jälkeen</string>
++    <string name="cd_previous_keyboard">Vaihda edelliseen näppäimistöön</string>
+     <string name="settings_add_space">Lisää välilyönti loppuun</string>
+     <string name="settings_apply">Ota käyttöön</string>
+     <string name="settings_enable_instructions">Ota tämä näppäimistö käyttöön:\n\n1. Siirry kohtaan Asetukset → Järjestelmä → Kielet ja syöttö → Näyttönäppäimistö\n2. Ota käyttöön \"Voice Keyboard\"\n3. Valitse se missä tahansa tekstikentässä</string>
+diff --git a/app/src/main/res/values-fr/strings.xml b/app/src/main/res/values-fr/strings.xml
+index cbb28f3..efc9ac6 100644
+--- a/app/src/main/res/values-fr/strings.xml
++++ b/app/src/main/res/values-fr/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Codes séparés par des virgules, par exemple : fr, en. Si vous en indiquez plusieurs, une touche de langue apparaît sur le clavier. Laissez vide pour une détection automatique.</string>
+     <string name="settings_endpoint">Point d\'accès API</string>
+     <string name="settings_auto_record">Enregistrement automatique</string>
++    <string name="settings_return_to_previous_keyboard">Revenir au clavier précédent après l\'insertion</string>
++    <string name="cd_previous_keyboard">Passer au clavier précédent</string>
+     <string name="settings_add_space">Ajouter un espace à la fin</string>
+     <string name="settings_apply">Appliquer</string>
+     <string name="settings_enable_instructions">Pour activer ce clavier :\n\n1. Allez dans Paramètres → Système → Langues et saisie → Clavier à l\'écran\n2. Activez \"Voice Keyboard\"\n3. Sélectionnez-le dans n\'importe quel champ de texte</string>
+diff --git a/app/src/main/res/values-hi/strings.xml b/app/src/main/res/values-hi/strings.xml
+index 836779d..41b0794 100644
+--- a/app/src/main/res/values-hi/strings.xml
++++ b/app/src/main/res/values-hi/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">अल्पविराम से अलग किए गए कोड, उदाहरण: hi, en. एक से अधिक जोड़ने पर कीबोर्ड पर भाषा कुंजी दिखाई देती है। स्वचालित पहचान के लिए खाली छोड़ें।</string>
+     <string name="settings_endpoint">API एंडपॉइंट</string>
+     <string name="settings_auto_record">स्वतः रिकॉर्डिंग</string>
++    <string name="settings_return_to_previous_keyboard">डालने के बाद पिछले कीबोर्ड पर वापस जाएं</string>
++    <string name="cd_previous_keyboard">पिछले कीबोर्ड पर स्विच करें</string>
+     <string name="settings_add_space">अंत में स्पेस जोड़ें</string>
+     <string name="settings_apply">लागू करें</string>
+     <string name="settings_enable_instructions">इस कीबोर्ड को सक्रिय करने के लिए:\n\n1. सेटिंग्स → सिस्टम → भाषाएँ और इनपुट → ऑन-स्क्रीन कीबोर्ड पर जाएँ\n2. \"Voice Keyboard\" सक्षम करें\n3. किसी भी टेक्स्ट फ़ील्ड में इसे चुनें</string>
+diff --git a/app/src/main/res/values-it/strings.xml b/app/src/main/res/values-it/strings.xml
+index cd1ae2e..6cb9bac 100644
+--- a/app/src/main/res/values-it/strings.xml
++++ b/app/src/main/res/values-it/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Codici separati da virgole, ad esempio: it, en. Indicandone più di una, sulla tastiera compare un tasto della lingua. Lascia vuoto per il rilevamento automatico.</string>
+     <string name="settings_endpoint">Endpoint API</string>
+     <string name="settings_auto_record">Registrazione automatica</string>
++    <string name="settings_return_to_previous_keyboard">Torna alla tastiera precedente dopo l\'inserimento</string>
++    <string name="cd_previous_keyboard">Passa alla tastiera precedente</string>
+     <string name="settings_add_space">Aggiungi spazio alla fine</string>
+     <string name="settings_apply">Applica</string>
+     <string name="settings_enable_instructions">Per attivare questa tastiera:\n\n1. Vai in Impostazioni → Sistema → Lingue e immissione → Tastiera su schermo\n2. Attiva \"Voice Keyboard\"\n3. Selezionala in qualsiasi campo di testo</string>
+diff --git a/app/src/main/res/values-ja/strings.xml b/app/src/main/res/values-ja/strings.xml
+index fc27b83..8fda4c0 100644
+--- a/app/src/main/res/values-ja/strings.xml
++++ b/app/src/main/res/values-ja/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">コンマ区切りのコード（例: ja, en）。複数指定すると、キーボードに言語切り替えキーが表示されます。空欄にすると自動判定します。</string>
+     <string name="settings_endpoint">APIエンドポイント</string>
+     <string name="settings_auto_record">自動録音</string>
++    <string name="settings_return_to_previous_keyboard">挿入後に前のキーボードに戻る</string>
++    <string name="cd_previous_keyboard">前のキーボードに切り替える</string>
+     <string name="settings_add_space">末尾にスペースを追加</string>
+     <string name="settings_apply">適用</string>
+     <string name="settings_enable_instructions">このキーボードを有効にするには：\n\n1. 設定 → システム → 言語と入力 → 画面キーボードに移動\n2. \"Voice Keyboard\" を有効にする\n3. 任意のテキストフィールドで選択する</string>
+diff --git a/app/src/main/res/values-ko/strings.xml b/app/src/main/res/values-ko/strings.xml
+index c526e38..236bb81 100644
+--- a/app/src/main/res/values-ko/strings.xml
++++ b/app/src/main/res/values-ko/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">쉼표로 구분된 코드, 예: ko, en. 두 개 이상 지정하면 키보드에 언어 키가 표시됩니다. 자동으로 감지하려면 비워 두세요.</string>
+     <string name="settings_endpoint">API 엔드포인트</string>
+     <string name="settings_auto_record">자동 녹음</string>
++    <string name="settings_return_to_previous_keyboard">삽입 후 이전 키보드로 돌아가기</string>
++    <string name="cd_previous_keyboard">이전 키보드로 전환</string>
+     <string name="settings_add_space">끝에 공백 추가</string>
+     <string name="settings_apply">적용</string>
+     <string name="settings_enable_instructions">이 키보드를 활성화하려면:\n\n1. 설정 → 시스템 → 언어 및 입력 → 화면 키보드로 이동\n2. \"Voice Keyboard\" 활성화\n3. 아무 텍스트 필드에서 선택</string>
+diff --git a/app/src/main/res/values-pl/strings.xml b/app/src/main/res/values-pl/strings.xml
+index d7d5d0d..21bdaee 100644
+--- a/app/src/main/res/values-pl/strings.xml
++++ b/app/src/main/res/values-pl/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Kody oddzielone przecinkami, na przykład: pl, en. Po podaniu kilku na klawiaturze pojawi się klawisz języka. Zostaw puste, aby wykrywać automatycznie.</string>
+     <string name="settings_endpoint">Punkt końcowy API</string>
+     <string name="settings_auto_record">Automatyczne nagrywanie</string>
++    <string name="settings_return_to_previous_keyboard">Wróć do poprzedniej klawiatury po wstawieniu</string>
++    <string name="cd_previous_keyboard">Przełącz na poprzednią klawiaturę</string>
+     <string name="settings_add_space">Dodaj spację na końcu</string>
+     <string name="settings_apply">Zastosuj</string>
+     <string name="settings_enable_instructions">Aby aktywować tę klawiaturę:\n\n1. Przejdź do Ustawienia → System → Języki i wprowadzanie → Klawiatura ekranowa\n2. Włącz \"Voice Keyboard\"\n3. Wybierz ją w dowolnym polu tekstowym</string>
+diff --git a/app/src/main/res/values-pt/strings.xml b/app/src/main/res/values-pt/strings.xml
+index 2217a52..7f032e2 100644
+--- a/app/src/main/res/values-pt/strings.xml
++++ b/app/src/main/res/values-pt/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Códigos separados por vírgulas, por exemplo: pt, en. Se indicar mais de um, aparece uma tecla de idioma no teclado. Deixe vazio para deteção automática.</string>
+     <string name="settings_endpoint">Endpoint da API</string>
+     <string name="settings_auto_record">Gravação automática</string>
++    <string name="settings_return_to_previous_keyboard">Voltar ao teclado anterior após inserir</string>
++    <string name="cd_previous_keyboard">Mudar para o teclado anterior</string>
+     <string name="settings_add_space">Adicionar espaço no final</string>
+     <string name="settings_apply">Aplicar</string>
+     <string name="settings_enable_instructions">Para ativar este teclado:\n\n1. Vá em Configurações → Sistema → Idiomas e entrada → Teclado na tela\n2. Ative \"Voice Keyboard\"\n3. Selecione-o em qualquer campo de texto</string>
+diff --git a/app/src/main/res/values-ru/strings.xml b/app/src/main/res/values-ru/strings.xml
+index 491bdc8..5f7f2e8 100644
+--- a/app/src/main/res/values-ru/strings.xml
++++ b/app/src/main/res/values-ru/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Коды через запятую, например: ru, en. Если указать несколько, на клавиатуре появится кнопка переключения языка. Оставьте пустым для автоопределения.</string>
+     <string name="settings_endpoint">Адрес API</string>
+     <string name="settings_auto_record">Автозапись</string>
++    <string name="settings_return_to_previous_keyboard">Возвращаться к предыдущей клавиатуре после вставки</string>
++    <string name="cd_previous_keyboard">Переключиться на предыдущую клавиатуру</string>
+     <string name="settings_add_space">Добавлять пробел в конце</string>
+     <string name="settings_apply">Применить</string>
+     <string name="settings_enable_instructions">Чтобы включить клавиатуру:\n\n1. Перейдите в Настройки → Система → Языки и ввод → Экранная клавиатура\n2. Включите \"Voice Keyboard\"\n3. Выберите её в любом текстовом поле</string>
+diff --git a/app/src/main/res/values-tr/strings.xml b/app/src/main/res/values-tr/strings.xml
+index c74219e..80bc23a 100644
+--- a/app/src/main/res/values-tr/strings.xml
++++ b/app/src/main/res/values-tr/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">Virgülle ayrılmış kodlar, örneğin: tr, en. Birden fazla eklerseniz klavyede bir dil tuşu görünür. Otomatik algılama için boş bırakın.</string>
+     <string name="settings_endpoint">API Adresi</string>
+     <string name="settings_auto_record">Otomatik kayıt</string>
++    <string name="settings_return_to_previous_keyboard">Eklendikten sonra önceki klavyeye dön</string>
++    <string name="cd_previous_keyboard">Önceki klavyeye geç</string>
+     <string name="settings_add_space">Sona boşluk ekle</string>
+     <string name="settings_apply">Uygula</string>
+     <string name="settings_enable_instructions">Bu klavyeyi etkinleştirmek için:\n\n1. Ayarlar → Sistem → Diller ve giriş → Ekran klavyesine gidin\n2. \"Voice Keyboard\" etkinleştirin\n3. Herhangi bir metin alanında seçin</string>
+diff --git a/app/src/main/res/values-zh/strings.xml b/app/src/main/res/values-zh/strings.xml
+index 7f7e8e8..2892f96 100644
+--- a/app/src/main/res/values-zh/strings.xml
++++ b/app/src/main/res/values-zh/strings.xml
+@@ -11,6 +11,8 @@
+     <string name="settings_language_hint">以逗号分隔的代码，例如：zh, en。指定多个时，键盘上会出现语言切换键。留空则自动检测。</string>
+     <string name="settings_endpoint">API 地址</string>
+     <string name="settings_auto_record">自动录音</string>
++    <string name="settings_return_to_previous_keyboard">插入后返回上一个键盘</string>
++    <string name="cd_previous_keyboard">切换到上一个键盘</string>
+     <string name="settings_add_space">末尾添加空格</string>
+     <string name="settings_apply">应用</string>
+     <string name="settings_enable_instructions">启用此键盘：\n\n1. 前往设置 → 系统 → 语言和输入法 → 屏幕键盘\n2. 启用 \"Voice Keyboard\"\n3. 在任意文本框中切换到该键盘</string>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
 index f8e5692..62985b5 100644
 --- a/app/src/main/res/values/strings.xml
@@ -307,10 +564,10 @@ index f8e5692..62985b5 100644
      <string name="settings_enable_instructions">To enable this keyboard:\n\n1. Go to Settings → System → Languages &amp; input → On-screen keyboard\n2. Enable \"Voice Keyboard\"\n3. Switch to it in any text field</string>
 diff --git a/app/src/test/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboardTest.kt b/app/src/test/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboardTest.kt
 new file mode 100644
-index 0000000..a62cbd4
+index 0000000..77d615c
 --- /dev/null
 +++ b/app/src/test/java/com/tyraen/voicekeyboard/feature/ime/ReturnToPreviousKeyboardTest.kt
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,71 @@
 +package com.tyraen.voicekeyboard.feature.ime
 +
 +import org.junit.Assert.assertEquals
@@ -325,9 +582,10 @@ index 0000000..a62cbd4
 +        inserted: Boolean = true,
 +        capturing: Boolean = false,
 +        pendingCount: Int = 0,
-+        failedCount: Int = 0
++        failedCount: Int = 0,
++        parkedLoaded: Boolean = true
 +    ) = ReturnToPreviousKeyboard.shouldReturnToPreviousKeyboard(
-+        enabled, inserted, capturing, pendingCount, failedCount
++        enabled, inserted, capturing, pendingCount, failedCount, parkedLoaded
 +    )
 +
 +    @Test fun `returns once the last dictation is typed and nothing else is left`() {
@@ -356,6 +614,10 @@ index 0000000..a62cbd4
 +        assertFalse(decide(failedCount = 2))
 +    }
 +
++    @Test fun `stays until parked recordings have loaded`() {
++        assertFalse(decide(parkedLoaded = false))
++    }
++
 +    @Test fun `across the whole truth table only the one clear combination returns`() {
 +        val flags = listOf(false, true)
 +        val returning = mutableListOf<List<Any>>()
@@ -364,14 +626,16 @@ index 0000000..a62cbd4
 +                for (capturing in flags) {
 +                    for (pending in 0..2) {
 +                        for (failed in 0..2) {
-+                            if (decide(enabled, inserted, capturing, pending, failed)) {
-+                                returning.add(listOf(enabled, inserted, capturing, pending, failed))
++                            for (parkedLoaded in flags) {
++                                if (decide(enabled, inserted, capturing, pending, failed, parkedLoaded)) {
++                                    returning.add(listOf(enabled, inserted, capturing, pending, failed, parkedLoaded))
++                                }
 +                            }
 +                        }
 +                    }
 +                }
 +            }
 +        }
-+        assertEquals(listOf(listOf(true, true, false, 0, 0)), returning)
++        assertEquals(listOf(listOf(true, true, false, 0, 0, true)), returning)
 +    }
 +}
