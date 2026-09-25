@@ -397,23 +397,6 @@
             android:layout_height="0dp"
             android:visibility="gone" />
 
-        <ImageButton
-            android:id="@+id/btnPreviousKeyboard"
-            android:layout_width="36dp"
-            android:layout_height="match_parent"
-            android:background="@drawable/key_bg"
-            android:src="@drawable/ic_keyboard_return"
-            android:contentDescription="@string/cd_previous_keyboard"
-            android:scaleType="centerInside"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:padding="0dp"
-            app:tint="@color/key_text" />
-
-        <View
-            android:layout_width="6dp"
-            android:layout_height="0dp" />
-
         <Button
             android:id="@+id/btnSpace"
             android:layout_width="0dp"

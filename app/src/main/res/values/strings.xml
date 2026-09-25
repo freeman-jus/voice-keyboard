@@ -12,7 +12,8 @@
     <string name="settings_language_hint">Comma-separated codes, for example: en, ru. Add more than one and a language key appears on the keyboard. Leave empty to detect automatically.</string>
     <string name="settings_endpoint">API Endpoint</string>
     <string name="settings_auto_record">Auto-start recording</string>
-    <string name="settings_return_to_previous_keyboard">Return to previous keyboard after inserting</string>
+    <string name="settings_return_to_previous_keyboard">Return to previous keyboard</string>
+    <string name="settings_return_to_previous_keyboard_hint">Turn on if you open Voice Keyboard with another keyboard\'s mic key: once your text is typed, that keyboard comes back, and the key in the top corner takes you back to it as well. Leave off if Voice Keyboard is your main keyboard.</string>
     <string name="cd_previous_keyboard">Switch to previous keyboard</string>
     <string name="settings_add_space">Add trailing space</string>
     <string name="settings_apply">Apply</string>

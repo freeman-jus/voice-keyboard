@@ -59,7 +59,8 @@ class KeystrokeDispatcher(private val connectionProvider: () -> InputConnection?
     /**
      * Commit a dictated chunk with context-aware padding: a space in front when the cursor sits
      * right after a word, the configured trailing space only when nothing is already there.
-     * Returns false if the text didn't reach the field, so the caller can fall back.
+     * Returns false when there is no connection or the editor's process is gone, so the caller can
+     * fall back; an editor that ignores the text still returns true.
      */
     fun insertDictation(text: String, addTrailingSpace: Boolean): Boolean {
         val ic = connectionProvider() ?: return false
