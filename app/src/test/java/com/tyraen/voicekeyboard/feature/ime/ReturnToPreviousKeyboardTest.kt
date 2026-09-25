@@ -12,9 +12,10 @@ class ReturnToPreviousKeyboardTest {
         inserted: Boolean = true,
         capturing: Boolean = false,
         pendingCount: Int = 0,
-        failedCount: Int = 0
+        failedCount: Int = 0,
+        parkedLoaded: Boolean = true
     ) = ReturnToPreviousKeyboard.shouldReturnToPreviousKeyboard(
-        enabled, inserted, capturing, pendingCount, failedCount
+        enabled, inserted, capturing, pendingCount, failedCount, parkedLoaded
     )
 
     @Test fun `returns once the last dictation is typed and nothing else is left`() {
@@ -43,6 +44,10 @@ class ReturnToPreviousKeyboardTest {
         assertFalse(decide(failedCount = 2))
     }
 
+    @Test fun `stays until parked recordings have loaded`() {
+        assertFalse(decide(parkedLoaded = false))
+    }
+
     @Test fun `across the whole truth table only the one clear combination returns`() {
         val flags = listOf(false, true)
         val returning = mutableListOf<List<Any>>()
@@ -51,14 +56,16 @@ class ReturnToPreviousKeyboardTest {
                 for (capturing in flags) {
                     for (pending in 0..2) {
                         for (failed in 0..2) {
-                            if (decide(enabled, inserted, capturing, pending, failed)) {
-                                returning.add(listOf(enabled, inserted, capturing, pending, failed))
+                            for (parkedLoaded in flags) {
+                                if (decide(enabled, inserted, capturing, pending, failed, parkedLoaded)) {
+                                    returning.add(listOf(enabled, inserted, capturing, pending, failed, parkedLoaded))
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        assertEquals(listOf(listOf(true, true, false, 0, 0)), returning)
+        assertEquals(listOf(listOf(true, true, false, 0, 0, true)), returning)
     }
 }

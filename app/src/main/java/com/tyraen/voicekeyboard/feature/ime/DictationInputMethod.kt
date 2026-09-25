@@ -144,7 +144,8 @@ class DictationInputMethod : InputMethodService() {
             capturing = orchestrator.currentPhase is InputPhase.Capturing,
             // Decided synchronously inside the queue's delivery, where pendingCount still counts this recording.
             pendingCount = ServiceLocator.transcriptionQueue.pendingCount - 1,
-            failedCount = ServiceLocator.parkedRecordingStore.count.value
+            failedCount = ServiceLocator.parkedRecordingStore.count.value,
+            parkedLoaded = ServiceLocator.parkedRecordingStore.isLoaded
         )
         if (!handBack) return
         switchToPreviousKeyboard { requestHideSelf(0) }

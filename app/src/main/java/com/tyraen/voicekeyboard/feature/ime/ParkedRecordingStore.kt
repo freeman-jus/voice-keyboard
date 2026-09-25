@@ -45,6 +45,10 @@ class ParkedRecordingStore(context: Context) {
     /** Total parked recordings (any state). Drives the resend badge; survives view rebuilds. */
     val count: StateFlow<Int> = _count
 
+    @Volatile private var loadPublished = false
+    /** Thread-safe read-only signal that the initial load has published its results. */
+    val isLoaded: Boolean get() = loadPublished
+
     /** Scan disk and load any parked recordings. Idempotent; safe to call from app startup. */
     suspend fun ensureLoaded() = withContext(dispatcher) { loadIfNeeded() }
 
@@ -73,6 +77,7 @@ class ParkedRecordingStore(context: Context) {
         // Note: orphan audio with no sidecar is intentionally left untouched — we can't reconstruct
         // its config, but deleting it is exactly the data loss we are preventing.
         publish()
+        loadPublished = true
         DiagnosticLog.record(TAG, "Loaded ${items.size} parked recording(s)")
     }
 

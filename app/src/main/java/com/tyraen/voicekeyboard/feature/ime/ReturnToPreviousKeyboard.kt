@@ -11,12 +11,15 @@ object ReturnToPreviousKeyboard {
     /**
      * [inserted] is false when the text went to the clipboard instead of the field.
      * [pendingCount] must not count the recording that was just delivered.
+     * [parkedLoaded] is false until the parked-recording store has published its initial load;
+     * before that, [failedCount] can't be trusted to be zero.
      */
     fun shouldReturnToPreviousKeyboard(
         enabled: Boolean,
         inserted: Boolean,
         capturing: Boolean,
         pendingCount: Int,
-        failedCount: Int
-    ): Boolean = enabled && inserted && !capturing && pendingCount == 0 && failedCount == 0
+        failedCount: Int,
+        parkedLoaded: Boolean
+    ): Boolean = parkedLoaded && enabled && inserted && !capturing && pendingCount == 0 && failedCount == 0
 }
