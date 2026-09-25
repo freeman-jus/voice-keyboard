@@ -202,6 +202,7 @@ class DictationInputMethod : InputMethodService() {
     }.onFailure { DiagnosticLog.recordFailure(TAG, "Switching to the previous keyboard failed", it) }
         .getOrDefault(false)
         .also { switched ->
+            DiagnosticLog.record(TAG, "Switch to previous keyboard: ${if (switched) "done" else "nothing to switch to"}")
             if (!switched) return@also
             // The service lives on until onDestroy, still holding the editor's connection, which the
             // app has already deactivated: anything delivered in that gap goes to the clipboard.
