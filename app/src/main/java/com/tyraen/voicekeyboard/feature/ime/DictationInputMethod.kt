@@ -147,8 +147,16 @@ class DictationInputMethod : InputMethodService() {
             failedCount = ServiceLocator.parkedRecordingStore.count.value
         )
         if (!handBack) return
+        switchToPreviousKeyboard { requestHideSelf(0) }
+    }
+
+    /**
+     * Switches to the keyboard that opened this one, falling back to [onNoPreviousKeyboard] when
+     * there is none to switch to (API < 28) or the platform declines the switch.
+     */
+    private fun switchToPreviousKeyboard(onNoPreviousKeyboard: () -> Unit) {
         val switched = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && switchToPreviousInputMethod()
-        if (!switched) requestHideSelf(0)
+        if (!switched) onNoPreviousKeyboard()
     }
 
     override fun onDestroy() {
@@ -164,6 +172,7 @@ class DictationInputMethod : InputMethodService() {
         val btnMic: ImageButton = view.findViewById(R.id.btnMic)
         val btnCancel: ImageButton = view.findViewById(R.id.btnCancel)
         val btnBackspace: ImageButton = view.findViewById(R.id.btnBackspace)
+        val btnPreviousKeyboard: ImageButton = view.findViewById(R.id.btnPreviousKeyboard)
         val btnSpace: Button = view.findViewById(R.id.btnSpace)
         val btnEnter: ImageButton = view.findViewById(R.id.btnEnter)
         val btnPeriod: Button = view.findViewById(R.id.btnPeriod)
@@ -208,6 +217,14 @@ class DictationInputMethod : InputMethodService() {
         }
 
         btnCutAll.setOnClickListener { keystrokes.cutAll() }
+
+        // Always available, independent of the "Return to previous keyboard after inserting"
+        // setting: one tap gets back to whatever keyboard opened this one.
+        btnPreviousKeyboard.setOnClickListener {
+            switchToPreviousKeyboard {
+                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
+            }
+        }
 
         btnSpace.setOnClickListener { keystrokes.insertText(" ") }
         btnSpace.setOnLongClickListener {

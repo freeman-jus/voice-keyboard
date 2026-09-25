@@ -13,6 +13,7 @@
     <string name="settings_endpoint">API Endpoint</string>
     <string name="settings_auto_record">Auto-start recording</string>
     <string name="settings_return_to_previous_keyboard">Return to previous keyboard after inserting</string>
+    <string name="cd_previous_keyboard">Switch to previous keyboard</string>
     <string name="settings_add_space">Add trailing space</string>
     <string name="settings_apply">Apply</string>
     <string name="settings_enable_instructions">To enable this keyboard:\n\n1. Go to Settings → System → Languages &amp; input → On-screen keyboard\n2. Enable \"Voice Keyboard\"\n3. Switch to it in any text field</string>
