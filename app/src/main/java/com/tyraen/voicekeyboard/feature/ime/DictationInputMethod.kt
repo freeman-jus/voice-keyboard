@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.inputmethodservice.InputMethodService
+import android.os.Build
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -65,9 +66,11 @@ class DictationInputMethod : InputMethodService() {
             onTextReady = { text, addTrailingSpace ->
                 // A visible panel can still lack an InputConnection (some apps drop it mid-edit);
                 // the clipboard is the fallback there too, never a silent loss.
-                if (!keyboardVisible || !keystrokes.insertDictation(text, addTrailingSpace)) {
+                val inserted = keyboardVisible && keystrokes.insertDictation(text, addTrailingSpace)
+                if (!inserted) {
                     copyToClipboard(if (addTrailingSpace) "$text " else text)
                 }
+                returnToPreviousKeyboardIfDone(inserted)
             },
             onPhaseChanged = { phase -> panel.transitionTo(phase) },
             onAmplitude = { level -> panel.animator.adjustForAmplitude(level) },
@@ -128,6 +131,24 @@ class DictationInputMethod : InputMethodService() {
     private fun copyToClipboard(text: String) {
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("Voice transcription", text))
+    }
+
+    /**
+     * With the setting on, hands the screen back to the keyboard that opened this one (another
+     * keyboard's mic key, say) once the last queued dictation has been typed. Main thread only.
+     */
+    private fun returnToPreviousKeyboardIfDone(inserted: Boolean) {
+        val handBack = ReturnToPreviousKeyboard.shouldReturnToPreviousKeyboard(
+            enabled = orchestrator.isReturnToPreviousKeyboardEnabled(),
+            inserted = inserted,
+            capturing = orchestrator.currentPhase is InputPhase.Capturing,
+            // Decided synchronously inside the queue's delivery, where pendingCount still counts this recording.
+            pendingCount = ServiceLocator.transcriptionQueue.pendingCount - 1,
+            failedCount = ServiceLocator.parkedRecordingStore.count.value
+        )
+        if (!handBack) return
+        val switched = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && switchToPreviousInputMethod()
+        if (!switched) requestHideSelf(0)
     }
 
     override fun onDestroy() {

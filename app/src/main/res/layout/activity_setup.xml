@@ -257,6 +257,17 @@
             android:trackTint="@color/switch_track_color"
             android:layout_marginBottom="12dp" />
 
+        <!-- Return to the previous keyboard after inserting -->
+        <Switch
+            android:id="@+id/switchReturnToPreviousKeyboard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_return_to_previous_keyboard"
+            android:textColor="@color/key_text"
+            android:thumbTint="@color/switch_thumb_color"
+            android:trackTint="@color/switch_track_color"
+            android:layout_marginBottom="12dp" />
+
         <!-- Add trailing space -->
         <Switch
             android:id="@+id/switchAddSpace"
