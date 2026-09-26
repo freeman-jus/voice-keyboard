@@ -1,5 +1,7 @@
 # Voice Keyboard (JF): unofficial fork
 
+> **Retired (26 Sep 2026).** This fork's feature was merged upstream in [rustemar/voice-keyboard#5](https://github.com/rustemar/voice-keyboard/pull/5) and shipped in **Voice Keyboard v1.9.2**, as the "Return to previous keyboard" setting. Please use the [official releases](https://github.com/rustemar/voice-keyboard/releases). This repo is archived; the old builds remain for reference only.
+
 > **This is an unofficial fork of [Voice Keyboard](https://github.com/rustemar/voice-keyboard) by [rustemar](https://github.com/rustemar).**
 > All of the app is rustemar's work, under the MIT licence. This fork adds one opt-in setting and builds signed APKs from rustemar's release tags. It is not affiliated with or endorsed by rustemar.
 > **Please report problems with these builds here, not upstream.** If you just want Voice Keyboard, use the [official releases](https://github.com/rustemar/voice-keyboard/releases).
